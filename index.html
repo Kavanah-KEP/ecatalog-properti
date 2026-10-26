@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+  <title>E-Catalog Properti</title>
+
+  <meta name="description" content="E-Catalog Properti — katalog perumahan, simulasi KPR, dan pemesanan unit secara online.">
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!--
+    PEMUAT PUSTAKA ANTI-LAYAR-PUTIH
+    Bootstrap, ikon, font, dan Chart.js dimuat TANPA memblokir tampilan.
+    Bila satu CDN lambat/diblokir jaringan, otomatis pindah ke CDN cadangan
+    (jsDelivr → cdnjs → unpkg). Layar tidak pernah kosong putih menunggu CDN.
+  -->
+  <script>
+  (function () {
+    var BATAS_CSS = 4000;    // CSS: bila 4 detik belum termuat, CDN cadangan ikut dicoba (berlomba)
+    var BATAS_JS = 9000;     // JS: bila 9 detik belum termuat, pindah ke CDN cadangan
+    function sisipkan(el) {
+      // Selalu sebelum Stylesheet aplikasi agar gaya kustom tetap menang
+      var penanda = document.getElementById('penandaCss');
+      if (penanda) document.head.insertBefore(el, penanda);
+      else document.head.appendChild(el);
+    }
+    function muatCss(daftar, id) {
+      return new Promise(function (selesai) {
+        var i = 0, beres = false, gagal = 0;
+        function coba() {
+          if (beres || i >= daftar.length) return;
+          var link = document.createElement('link');
+          link.rel = 'stylesheet'; link.href = daftar[i++];
+          if (i === 1) link.id = id;
+          var pewaktu = setTimeout(coba, BATAS_CSS);   // lambat → CDN berikutnya ikut berlomba
+          link.onload = function () {
+            clearTimeout(pewaktu);
+            if (!beres) { beres = true; selesai(true); }
+          };
+          link.onerror = function () {
+            clearTimeout(pewaktu);
+            if (link.parentNode) link.parentNode.removeChild(link);
+            gagal++;
+            if (i < daftar.length) coba();
+            else if (gagal >= daftar.length && !beres) { beres = true; selesai(false); }
+          };
+          sisipkan(link);
+        }
+        coba();
+      });
+    }
+    function muatJs(daftar, cekSiap) {
+      return new Promise(function (selesai) {
+        var i = 0, pewaktu = null, beres = false;
+        function sukses() { if (beres) return; beres = true; clearTimeout(pewaktu); selesai(true); }
+        function coba() {
+          if (beres) return;
+          if (cekSiap()) { sukses(); return; }
+          if (i >= daftar.length) { beres = true; selesai(false); return; }
+          var sc = document.createElement('script');
+          sc.src = daftar[i++]; sc.async = true;
+          sc.onload = function () { if (cekSiap()) sukses(); else coba(); };
+          sc.onerror = function () { clearTimeout(pewaktu); coba(); };
+          pewaktu = setTimeout(coba, BATAS_JS);
+          document.head.appendChild(sc);
+        }
+        coba();
+      });
+    }
+    window.PustakaSiap = {
+      css: muatCss([
+        'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
+        'https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css',
+        'https://unpkg.com/bootstrap@5.3.3/dist/css/bootstrap.min.css'
+      ], 'cssBootstrap'),
+      ikon: muatCss([
+        'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
+        'https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css',
+        'https://unpkg.com/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css'
+      ], 'cssIkon'),
+      bootstrap: muatJs([
+        'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js',
+        'https://unpkg.com/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js'
+      ], function () { return !!(window.bootstrap && window.bootstrap.Modal); }),
+      chart: muatJs([
+        'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.js',
+        'https://unpkg.com/chart.js@4.4.4/dist/chart.umd.js'
+      ], function () { return typeof window.Chart === 'function'; })
+    };
+    // Font Google: tidak memblokir tampilan (huruf cadangan tampil lebih dulu)
+    muatCss(['https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600;700&display=swap'], 'cssFont');
+  })();
+  </script>
+
+  <meta name="penanda-css" id="penandaCss">
+  <link rel="stylesheet" href="css/style.css?v=6.0">
+</head>
+<body>
+
+<!-- ══════════════ OVERLAY MEMUAT ══════════════ -->
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loader-ring" id="loaderRing"></div>
+  <p class="mb-0 text-muted-2" id="loaderTeks" style="font-size:.88rem;max-width:440px;text-align:center;padding:0 16px">Memuat E-Catalog Properti…</p>
+  <div id="loaderAksi" class="hidden" style="text-align:center">
+    <button type="button" class="btn-muat-ulang" onclick="cobaMuatLagi()">Coba Lagi</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     TAMPILAN 1 — ETALASE PUBLIK
+     ══════════════════════════════════════════════════════════ -->
+<div id="viewPublic" class="hidden">
+
+  <!-- Navbar -->
+  <header class="nav-public">
+    <div class="container d-flex align-items-center justify-content-between py-2 gap-2">
+      <div class="brand cursor-pointer" onclick="goPublic('beranda')">
+        <span id="pubLogoWrap"><span class="brand-fallback" id="pubLogoFallback">E</span></span>
+        <span id="pubBrandName" class="d-none d-sm-inline">E-Catalog Properti</span>
+      </div>
+
+      <nav class="d-none d-lg-flex align-items-center gap-1" id="pubNav">
+        <span class="nav-item-pub active" data-pub="beranda" onclick="goPublic('beranda')">Beranda</span>
+        <span class="nav-item-pub" data-pub="daftarProyek" onclick="goPublic('daftarProyek')">Daftar Proyek</span>
+        <span class="nav-item-pub" data-pub="simulasiKpr" onclick="goPublic('simulasiKpr')">Simulasi KPR</span>
+        <span class="nav-item-pub" data-pub="cekStatus" onclick="goPublic('cekStatus')">Cek Status KPR</span>
+        <span class="nav-item-pub nav-testimoni" data-pub="testimoni" onclick="goPublic('testimoni')">Testimoni</span>
+      </nav>
+
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-ghost text-white border-0" onclick="toggleDarkMode()" title="Mode gelap/terang">
+          <i class="bi bi-moon-stars" id="pubThemeIcon"></i>
+        </button>
+        <button class="btn btn-sm btn-light-soft" onclick="showLogin()">Masuk</button>
+        <button class="btn btn-sm btn-ghost text-white border-0 d-lg-none" onclick="togglePubMenu()">
+          <i class="bi bi-list fs-5"></i>
+        </button>
+      </div>
+    </div>
+    <div id="pubMenuMobile" class="d-lg-none hidden" style="background:var(--primary-deep)">
+      <div class="container py-2 d-flex flex-column">
+        <span class="nav-item-pub" data-pub="beranda" onclick="goPublic('beranda')">Beranda</span>
+        <span class="nav-item-pub" data-pub="daftarProyek" onclick="goPublic('daftarProyek')">Daftar Proyek</span>
+        <span class="nav-item-pub" data-pub="simulasiKpr" onclick="goPublic('simulasiKpr')">Simulasi KPR</span>
+        <span class="nav-item-pub" data-pub="cekStatus" onclick="goPublic('cekStatus')">Cek Status KPR</span>
+        <span class="nav-item-pub nav-testimoni" data-pub="testimoni" onclick="goPublic('testimoni')">Testimoni</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Halaman: Beranda ── -->
+  <section id="pub-beranda" class="page active">
+    <div id="heroArea"></div>
+
+    <div class="container" id="statWrap">
+      <div class="row g-3" id="statEtalase"></div>
+    </div>
+
+    <div class="container mt-5">
+      <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
+        <div>
+          <div class="sect-label">Daftar Proyek Pilihan</div>
+          <h2 class="mb-0">Eksplorasi Hunian Terbaik</h2>
+        </div>
+        <div class="d-flex flex-wrap gap-2" id="filterKota"></div>
+      </div>
+      <div class="row g-4" id="gridProyekBeranda"></div>
+    </div>
+
+    <!-- v4.4: Testimoni konsumen (dikelola tim internal) -->
+    <div class="container mt-5 hidden" id="testimoniWrap">
+      <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
+        <div style="max-width:680px">
+          <div class="sect-label">Testimoni Konsumen</div>
+          <h2 class="mb-1" id="testimoniJudul">Cerita Keluarga yang Telah Pulang ke Rumah Baru</h2>
+          <p class="text-muted-2 mb-0" id="testimoniSub"></p>
+        </div>
+        <div class="d-flex gap-2" id="testimoniNav">
+          <button type="button" class="btn btn-sm btn-ghost" onclick="geserTestimoni(-1)" aria-label="Testimoni sebelumnya"><i class="bi bi-chevron-left"></i></button>
+          <button type="button" class="btn btn-sm btn-ghost" onclick="geserTestimoni(1)" aria-label="Testimoni berikutnya"><i class="bi bi-chevron-right"></i></button>
+        </div>
+      </div>
+      <div class="testi-track" id="testimoniBeranda"></div>
+      <div class="testi-catatan"><i class="bi bi-shield-check"></i> Penilaian &amp; dokumentasi disusun oleh tim internal kami saat serah terima kunci.</div>
+    </div>
+
+    <div class="container mt-5">
+      <div class="cta-band">
+        <div class="row align-items-center g-4">
+          <div class="col-lg-7">
+            <div class="sect-label" style="color:var(--accent-soft)">Simulasi &amp; Pengajuan</div>
+            <h3 class="mb-3">Wujudkan Rumah Impian dengan KPR Mudah</h3>
+            <p style="color:rgba(255,255,255,.85)">Hitung estimasi cicilan bulanan Anda secara akurat dan ajukan KPR langsung melalui bank partner terpercaya kami.</p>
+            <div class="d-flex flex-wrap gap-2">
+              <button class="btn btn-light-soft" onclick="goPublic('simulasiKpr')">Simulasi KPR Sekarang</button>
+              <button class="btn btn-ghost text-white" onclick="goPublic('cekStatus')">Cek Status KPR</button>
+            </div>
+          </div>
+          <div class="col-lg-5">
+            <div class="card-flat p-3" style="background:rgba(255,255,255,.95)">
+              <div class="text-muted-2" style="font-size:.76rem">Estimasi Cicilan / Bulan</div>
+              <div class="font-head fw-bold" style="font-size:1.7rem;color:var(--primary)" id="ctaCicilan">Rp 0</div>
+              <div class="progress my-2" style="height:6px"><div class="progress-bar" style="width:68%;background:var(--primary)"></div></div>
+              <div class="text-muted-2" style="font-size:.76rem" id="ctaBunga">Bunga mulai dari 7,5% p.a.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Halaman: Daftar Proyek ── -->
+  <section id="pub-daftarProyek" class="page">
+    <div class="container py-4">
+      <div class="sect-label">Katalog</div>
+      <h2 class="mb-4">Daftar Proyek Perumahan</h2>
+      <div class="row g-4" id="gridProyekSemua"></div>
+    </div>
+  </section>
+
+  <!-- ── Halaman: Detail Proyek (peta kavling) ── -->
+  <section id="pub-detailProyek" class="page">
+    <div id="detailHero"></div>
+    <div class="container py-4">
+      <div class="row g-4">
+        <div class="col-lg-3">
+          <div class="card-lux p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="mb-0 font-head">Filter Kavling</h6>
+              <button class="btn btn-sm btn-link p-0 text-decoration-none" onclick="resetFilterKavling()">Reset</button>
+            </div>
+            <label class="form-label">Pilih Blok</label>
+            <select class="form-select mb-3" id="fltBlok" onchange="renderKavlingProyek()"><option value="">Semua Blok</option></select>
+            <label class="form-label">Status Kavling</label>
+            <select class="form-select mb-3" id="fltStatus" onchange="renderKavlingProyek()">
+              <option value="">Semua Status</option>
+              <option>Tersedia</option><option>Proses KPR</option><option>SP3K</option><option>Terjual</option>
+            </select>
+            <label class="form-label">Rentang Harga</label>
+            <select class="form-select mb-3" id="fltHarga" onchange="renderKavlingProyek()">
+              <option value="">Semua Harga</option>
+              <option value="0-1000000000">&lt; Rp 1 M</option>
+              <option value="1000000000-2000000000">Rp 1 – 2 M</option>
+              <option value="2000000000-999000000000">&gt; Rp 2 M</option>
+            </select>
+          </div>
+          <div class="card-lux p-3">
+            <div class="sect-label mb-2">Statistik Kavling</div>
+            <div id="statKavling"></div>
+          </div>
+        </div>
+
+        <div class="col-lg-9">
+          <div class="card-lux p-3 mb-3 d-flex flex-wrap gap-2 align-items-center">
+            <div class="input-group" style="max-width:340px">
+              <span class="input-group-text"><i class="bi bi-search"></i></span>
+              <input type="text" class="form-control" id="fltCariKavling" placeholder="Cari nomor kavling (contoh: A-01)…" oninput="debounceRenderKavling()">
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+              <span class="text-muted-2" style="font-size:.82rem">Urutkan:</span>
+              <select class="form-select form-select-sm" style="width:auto" id="fltUrut" onchange="renderKavlingProyek()">
+                <option value="nomor">Nomor Kavling</option>
+                <option value="murah">Harga Terendah</option>
+                <option value="mahal">Harga Tertinggi</option>
+              </select>
+            </div>
+          </div>
+          <div id="kavlingArea"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Halaman: Form Pembelian (4 langkah) ── -->
+  <section id="pub-formBeli" class="page">
+    <div class="container py-4" style="max-width:820px">
+      <div class="text-center mb-4">
+        <div class="sect-label">Formulir Resmi</div>
+        <h2 class="mb-1">Pemesanan Kavling Eksklusif</h2>
+        <p class="text-muted-2">Lengkapi data diri dan ikuti langkah mudah untuk mengamankan kavling pilihan Anda.</p>
+      </div>
+
+      <div class="card-lux p-4 p-md-4">
+        <div class="stepper" id="stepper">
+          <div class="step active" data-step="1"><div class="dot">1</div><small>Data Diri</small></div>
+          <div class="bar"></div>
+          <div class="step" data-step="2"><div class="dot">2</div><small>Dokumen &amp; Pekerjaan</small></div>
+          <div class="bar"></div>
+          <div class="step" data-step="3"><div class="dot">3</div><small>Metode Pembayaran</small></div>
+          <div class="bar"></div>
+          <div class="step" data-step="4"><div class="dot">4</div><small>Konfirmasi</small></div>
+        </div>
+
+        <form id="formBeli" novalidate>
+          <!-- Langkah 1 -->
+          <div class="step-pane active" data-pane="1">
+            <h6 class="font-head mb-3"><i class="bi bi-person-vcard text-primary-brand"></i> Data Diri Pemesan</h6>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Nama Lengkap (sesuai KTP) <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" name="nama" required placeholder="Contoh: Budi Santoso">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">NIK (16 digit) <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" name="nik" required inputmode="numeric" maxlength="16" placeholder="3271xxxxxxxxxxxx">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">No. HP / WhatsApp <span class="text-danger">*</span></label>
+                <input type="tel" class="form-control" name="hp" required placeholder="08xxxxxxxxxx">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-control" name="email" placeholder="nama@email.com">
+              </div>
+              <div class="col-12">
+                <label class="form-label">Alamat Domisili</label>
+                <textarea class="form-control" name="catatan" rows="2" placeholder="Alamat tempat tinggal saat ini"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Langkah 2 -->
+          <div class="step-pane" data-pane="2">
+            <h6 class="font-head mb-3"><i class="bi bi-briefcase"></i> Informasi Pekerjaan &amp; Penghasilan</h6>
+            <div class="row g-3 mb-4">
+              <div class="col-md-6">
+                <label class="form-label">Jenis Pekerjaan</label>
+                <select class="form-select" name="pekerjaan">
+                  <option value="">Pilih Jenis Pekerjaan</option>
+                  <option>Karyawan Swasta</option><option>PNS / ASN</option><option>TNI / Polri</option>
+                  <option>Wiraswasta</option><option>Profesional</option><option>Lainnya</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Nama Perusahaan / Instansi</label>
+                <input type="text" class="form-control" name="perusahaan" placeholder="Contoh: PT Maju Sejahtera">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Jabatan / Posisi</label>
+                <input type="text" class="form-control" name="jabatan" placeholder="Contoh: Manajer Operasional">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Estimasi Penghasilan per Bulan</label>
+                <select class="form-select" name="penghasilan">
+                  <option value="">Pilih Rentang Penghasilan</option>
+                  <option>&lt; Rp 10 Juta</option><option>Rp 10 – 25 Juta</option>
+                  <option>Rp 25 – 50 Juta</option><option>&gt; Rp 50 Juta</option>
+                </select>
+              </div>
+            </div>
+
+            <h6 class="font-head mb-2"><i class="bi bi-file-earmark-arrow-up"></i> Unggah Dokumen Pendukung</h6>
+            <p class="text-muted-2" style="font-size:.8rem">Format yang didukung: JPG, PNG, atau PDF. Maksimal 2 MB per dokumen.</p>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Foto KTP Pemohon</label>
+                <div class="upload-box" id="boxKtp" onclick="document.getElementById('fileKtp').click()">
+                  <i class="bi bi-person-badge"></i>
+                  <div style="font-size:.86rem">Seret file ke sini atau <u>telusuri</u></div>
+                  <small>KTP asli yang masih berlaku</small>
+                </div>
+                <input type="file" id="fileKtp" class="hidden" accept="image/*,.pdf" onchange="tandaiFile('fileKtp','boxKtp')">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Foto Kartu Keluarga (KK)</label>
+                <div class="upload-box" id="boxKk" onclick="document.getElementById('fileKk').click()">
+                  <i class="bi bi-diagram-3"></i>
+                  <div style="font-size:.86rem">Seret file ke sini atau <u>telusuri</u></div>
+                  <small>Kartu Keluarga terbaru</small>
+                </div>
+                <input type="file" id="fileKk" class="hidden" accept="image/*,.pdf" onchange="tandaiFile('fileKk','boxKk')">
+              </div>
+            </div>
+          </div>
+
+          <!-- Langkah 3 -->
+          <div class="step-pane" data-pane="3">
+            <h6 class="font-head mb-3"><i class="bi bi-credit-card"></i> Metode Pembayaran</h6>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Metode Pembelian <span class="text-danger">*</span></label>
+                <select class="form-select" name="metode" id="metodeBeli" required onchange="onMetodeChange()">
+                  <option value="KPR">KPR (Kredit Pemilikan Rumah)</option>
+                  <option value="Cash">Cash / Tunai Keras</option>
+                  <option value="Tempo">Cash Bertahap (Tempo)</option>
+                </select>
+              </div>
+              <div class="col-md-6" id="wrapBank">
+                <label class="form-label">Bank Partner Pilihan</label>
+                <select class="form-select" name="bank">
+                  <option value="">Belum menentukan</option>
+                  <option>Bank Mandiri</option><option>Bank BCA</option><option>Bank BNI</option>
+                  <option>Bank BRI</option><option>Bank BTN</option><option>Bank Syariah Indonesia</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Nama Marketing (bila dibantu)</label>
+                <input type="text" class="form-control" name="marketing" placeholder="Kosongkan bila mengisi mandiri">
+              </div>
+            </div>
+            <div class="mb-1">
+              <label class="form-label">Foto Bukti Pembayaran Tanda Jadi</label>
+              <div class="upload-box" id="boxBukti" onclick="document.getElementById('fileBukti').click()">
+                <i class="bi bi-receipt"></i>
+                <div style="font-size:.86rem">Seret file ke sini atau <u>telusuri</u></div>
+                <small>Bukti transfer booking fee (opsional pada tahap ini)</small>
+              </div>
+              <input type="file" id="fileBukti" class="hidden" accept="image/*,.pdf" onchange="tandaiFile('fileBukti','boxBukti')">
+            </div>
+            <div class="alert mt-3 mb-0" style="background:var(--info-bg);border:none;color:var(--primary);font-size:.84rem">
+              <i class="bi bi-info-circle"></i> Untuk metode <b>Tempo</b>, unggah dokumen dilakukan sekali di awal. Pembayaran cicilan berikutnya dikoordinasikan via WhatsApp dengan admin kantor.
+            </div>
+          </div>
+
+          <!-- Langkah 4 -->
+          <div class="step-pane" data-pane="4">
+            <h6 class="font-head mb-3"><i class="bi bi-check2-circle"></i> Konfirmasi Pemesanan</h6>
+            <div id="ringkasanPesanan"></div>
+            <div class="form-check mt-3">
+              <input class="form-check-input" type="checkbox" id="setuju" required>
+              <label class="form-check-label" for="setuju" style="font-size:.86rem">
+                Saya menyatakan data yang diisi benar dan menyetujui syarat &amp; ketentuan pemesanan unit.
+              </label>
+            </div>
+          </div>
+
+          <!-- Ringkasan kavling terpilih -->
+          <div class="card-flat p-3 mt-4 d-flex flex-wrap align-items-center gap-3" id="kavlingTerpilihBox"></div>
+
+          <div class="d-flex justify-content-between mt-4">
+            <button type="button" class="btn btn-ghost" id="btnPrev" onclick="stepPrev()"><i class="bi bi-arrow-left"></i> Kembali</button>
+            <button type="button" class="btn btn-brand" id="btnNext" onclick="stepNext()">Lanjut <i class="bi bi-arrow-right"></i></button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Halaman: Simulasi KPR ── -->
+  <section id="pub-simulasiKpr" class="page">
+    <div class="container py-4">
+      <div class="sect-label">Simulasi Finansial</div>
+      <h2 class="mb-1">Kalkulator KPR Properti</h2>
+      <p class="text-muted-2 mb-4">Hitung estimasi cicilan KPR hunian impian Anda secara transparan dan akurat.</p>
+
+      <div class="row g-4">
+        <div class="col-lg-7">
+          <div class="card-lux p-4">
+            <h6 class="font-head mb-3"><i class="bi bi-sliders"></i> Parameter Pembiayaan</h6>
+            <label class="form-label">Harga Properti (Rp)</label>
+            <div class="input-group mb-2">
+              <span class="input-group-text">Rp</span>
+              <input type="text" class="form-control tabular" id="kprHarga" value="1.500.000.000" oninput="formatRibuan(this); hitungKPR()">
+            </div>
+            <div class="d-flex gap-2 mb-3 flex-wrap">
+              <span class="filter-chip" onclick="setHargaKpr(800000000)">Rp 800 Juta</span>
+              <span class="filter-chip" onclick="setHargaKpr(1500000000)">Rp 1,5 Miliar</span>
+              <span class="filter-chip" onclick="setHargaKpr(3000000000)">Rp 3 Miliar</span>
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Uang Muka / DP (%)</label>
+                <div class="input-group">
+                  <input type="number" class="form-control" id="kprDp" value="20" min="0" max="90" oninput="hitungKPR()">
+                  <span class="input-group-text">%</span>
+                </div>
+                <small class="text-muted-2" id="kprDpNominal">Rp 300.000.000</small>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Jangka Waktu (Tahun)</label>
+                <select class="form-select" id="kprTenor" onchange="hitungKPR()">
+                  <option>5</option><option>10</option><option>15</option>
+                  <option selected>20</option><option>25</option><option>30</option>
+                </select>
+              </div>
+            </div>
+            <label class="form-label d-flex justify-content-between">
+              <span>Suku Bunga (% p.a)</span><b id="kprBungaLabel">7,5%</b>
+            </label>
+            <input type="range" class="form-range" id="kprBunga" min="3" max="15" step="0.25" value="7.5" oninput="hitungKPR()">
+            <div class="d-flex justify-content-between text-muted-2" style="font-size:.74rem">
+              <span>3% (Promo)</span><span>7,5% (Standar)</span><span>15%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-5">
+          <div class="kpr-result mb-3">
+            <div class="sect-label" style="color:var(--accent-soft)">Estimasi Cicilan per Bulan</div>
+            <div class="big" id="kprCicilan">Rp 0</div>
+            <div style="font-size:.8rem;color:rgba(255,255,255,.8)">Suku bunga tetap 3 tahun pertama, floating setelahnya.</div>
+            <hr style="border-color:rgba(255,255,255,.25)">
+            <div class="row-line"><span>Plafon Pinjaman (KPR)</span><b id="kprPlafon">Rp 0</b></div>
+            <div class="row-line"><span>Total Uang Muka (DP)</span><b id="kprDpOut">Rp 0</b></div>
+            <div class="row-line"><span>Minimal Penghasilan</span><b id="kprMinGaji">Rp 0</b></div>
+            <button class="btn btn-light-soft w-100 mt-3" onclick="goPublic('daftarProyek')">Lihat Kavling Tersedia</button>
+          </div>
+          <div class="card-lux p-3">
+            <h6 class="font-head mb-3">Rincian Komponen Biaya</h6>
+            <div id="kprRincian"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-center mt-5 mb-3">
+        <div class="sect-label">Panduan &amp; Tips</div>
+        <h3>Edukasi &amp; FAQ KPR Properti</h3>
+      </div>
+      <div class="accordion mx-auto" id="faqKpr" style="max-width:820px"></div>
+    </div>
+  </section>
+
+  <!-- ── Halaman: Cek Status KPR ── -->
+  <section id="pub-cekStatus" class="page">
+    <div class="container py-4" style="max-width:760px">
+      <div class="text-center mb-4">
+        <div class="sect-label">Transparansi Proses</div>
+        <h2 class="mb-1">Cek Status Pengajuan KPR</h2>
+        <p class="text-muted-2">Masukkan NIK yang Anda gunakan saat memesan untuk melihat progres terkini.</p>
+      </div>
+      <div class="card-lux p-4">
+        <label class="form-label">Nomor Induk Kependudukan (NIK)</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+          <input type="text" class="form-control" id="inputNikCek" maxlength="16" inputmode="numeric" placeholder="Masukkan 16 digit NIK">
+          <button class="btn btn-brand" onclick="cekStatus()"><i class="bi bi-search"></i> Cek Status</button>
+        </div>
+      </div>
+      <div id="hasilCekStatus" class="mt-4"></div>
+    </div>
+  </section>
+
+  <!-- ── Halaman: Testimoni Konsumen (v4.5) ── -->
+  <section id="pub-testimoni" class="page">
+    <div class="container py-4">
+      <div class="text-center mx-auto mb-4" style="max-width:720px">
+        <div class="sect-label">Testimoni Konsumen</div>
+        <h2 class="mb-1" id="halTestimoniJudul">Cerita Keluarga yang Telah Pulang ke Rumah Baru</h2>
+        <p class="text-muted-2 mb-0" id="halTestimoniSub"></p>
+      </div>
+      <div class="row g-4" id="gridTestimoni"></div>
+      <div class="testi-catatan text-center mt-4"><i class="bi bi-shield-check"></i> Penilaian &amp; dokumentasi disusun oleh tim internal kami saat serah terima kunci.</div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer-public">
+    <div class="container">
+      <div class="row g-4">
+        <div class="col-md-5">
+          <div class="f-brand mb-2" id="footBrand">E-Catalog Properti</div>
+          <p style="font-size:.86rem" id="footDeskripsi"></p>
+        </div>
+        <div class="col-md-3">
+          <h6 class="mb-3">Tautan Cepat</h6>
+          <a onclick="goPublic('beranda')" class="cursor-pointer">Beranda</a>
+          <a onclick="goPublic('daftarProyek')" class="cursor-pointer">Daftar Proyek</a>
+          <a onclick="goPublic('simulasiKpr')" class="cursor-pointer">Simulasi KPR</a>
+          <a onclick="showLogin()" class="cursor-pointer">Portal Internal</a>
+        </div>
+        <div class="col-md-4">
+          <h6 class="mb-3">Hubungi Kami</h6>
+          <p style="font-size:.86rem" id="footAlamat"></p>
+          <p style="font-size:.86rem" id="footKontak"></p>
+        </div>
+      </div>
+      <div class="footer-bottom">© <span id="footTahun"></span> <span id="footNama">E-Catalog Properti</span>. Seluruh hak cipta dilindungi.</div>
+    </div>
+  </footer>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     TAMPILAN 2 — LOGIN INTERNAL
+     ══════════════════════════════════════════════════════════ -->
+<div id="viewLogin" class="hidden">
+  <div class="login-screen">
+    <div class="login-card">
+      <div class="login-logo" id="loginLogoWrap"><i class="bi bi-house-heart"></i></div>
+      <div class="text-center">
+        <div class="brand-name" id="loginBrand">E-CATALOG PROPERTI</div>
+        <div class="brand-sub">Luxury Real Estate</div>
+        <div class="login-divider"></div>
+        <p class="text-muted-2" style="font-size:.9rem">Portal Masuk Internal</p>
+      </div>
+
+      <form id="formLogin" onsubmit="doLogin(event)">
+        <div class="mb-3">
+          <label class="form-label">Email atau Nama Pengguna</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+            <input type="text" class="form-control" id="loginUser" autocomplete="username" placeholder="mis. marketing01" required>
+          </div>
+        </div>
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <label class="form-label mb-0">Kata Sandi</label>
+            <a class="cursor-pointer" style="font-size:.8rem" onclick="infoLupaSandi()">Lupa sandi?</a>
+          </div>
+          <div class="input-group pwd-wrap mt-1">
+            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+            <input type="password" class="form-control" id="loginPass" autocomplete="current-password" placeholder="••••••••" required style="padding-right:2.4rem">
+            <button type="button" class="pwd-toggle" onclick="togglePassword('loginPass', this)" aria-label="Lihat kata sandi">
+              <i class="bi bi-eye"></i>
+            </button>
+          </div>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="ingatSaya">
+          <label class="form-check-label" for="ingatSaya" style="font-size:.86rem">Ingat perangkat ini</label>
+        </div>
+        <div id="loginAlert" class="alert alert-danger py-2 hidden" style="font-size:.85rem"></div>
+        <button type="submit" class="btn btn-brand w-100 py-2" id="btnLogin">Masuk <i class="bi bi-arrow-right"></i></button>
+      </form>
+
+      <hr class="my-4">
+      <div class="text-center">
+        <button class="btn btn-sm btn-ghost" onclick="showPublic()"><i class="bi bi-arrow-left"></i> Kembali ke Etalase</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     TAMPILAN 3 — DASHBOARD INTERNAL
+     ══════════════════════════════════════════════════════════ -->
+<div id="viewApp" class="hidden">
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span id="appLogoWrap"><span class="s-logo-fallback" id="appLogoFallback">E</span></span>
+      <div class="s-name" id="appBrandName">E-Catalog</div>
+    </div>
+    <ul class="sidebar-nav" id="sidebarNav"></ul>
+    <div class="sidebar-footer">
+      <div class="u-row">
+        <div class="avatar" id="userAvatar">U</div>
+        <div>
+          <div class="u-name" id="userNama">Pengguna</div>
+          <div class="u-role" id="userRole">Role</div>
+        </div>
+      </div>
+      <div class="form-check form-switch mb-2">
+        <input class="form-check-input" type="checkbox" id="darkModeToggle" onchange="toggleDarkMode()">
+        <label class="form-check-label" for="darkModeToggle"><i class="bi bi-moon-stars"></i> Mode Gelap</label>
+      </div>
+      <button class="btn btn-sm w-100 btn-ghost text-start" style="color:var(--sidebar-text);border-color:rgba(255,255,255,.18)" onclick="doLogout()">
+        <i class="bi bi-box-arrow-right"></i> Keluar
+      </button>
+    </div>
+  </aside>
+
+  <main class="app-main">
+    <div class="app-topbar">
+      <button class="btn btn-sm btn-ghost d-lg-none" onclick="toggleSidebar()"><i class="bi bi-list fs-5"></i></button>
+      <h1 class="page-title" id="appPageTitle">Dashboard</h1>
+      <div class="search-global d-none d-md-block ms-3">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" class="form-control" id="globalSearch" placeholder="Cari kavling, konsumen, SPR…" oninput="globalSearchHandler()">
+        </div>
+      </div>
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <!-- v4.6: lonceng pemberitahuan -->
+        <div class="notif-wrap">
+          <button class="btn btn-sm btn-ghost notif-btn" id="btnNotif" onclick="toggleNotif(event)" title="Pemberitahuan" aria-label="Pemberitahuan">
+            <i class="bi bi-bell"></i><span class="notif-badge hidden" id="notifBadge">0</span>
+          </button>
+          <div class="notif-panel hidden" id="notifPanel"></div>
+        </div>
+        <button class="btn btn-sm btn-ghost" onclick="refreshWorkspace()" title="Segarkan data"><i class="bi bi-arrow-clockwise"></i></button>
+        <button class="btn btn-sm btn-ghost d-none d-sm-inline-flex" onclick="showPublic()" title="Lihat etalase publik"><i class="bi bi-shop"></i></button>
+        <div class="avatar" style="width:34px;height:34px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-size:.85rem;font-weight:600" id="topAvatar">U</div>
+      </div>
+    </div>
+
+    <div class="app-content">
+      <div id="globalSearchResult" class="mb-3"></div>
+
+      <section id="app-dashboard" class="page active"></section>
+      <section id="app-pilihProyek" class="page"></section>
+      <section id="app-dataKonsumen" class="page"></section>
+      <section id="app-spr" class="page"></section>
+      <section id="app-uploadBerkas" class="page"></section>
+      <section id="app-jadwalAkad" class="page"></section>
+      <section id="app-desainSpr" class="page"></section>
+      <section id="app-masterProyek" class="page"></section>
+      <section id="app-hargaPromo" class="page"></section>
+      <section id="app-pengguna" class="page"></section>
+      <section id="app-desainEtalase" class="page"></section>
+      <section id="app-konfigurasi" class="page"></section>
+      <section id="app-indent" class="page"></section>
+      <section id="app-laporan" class="page"></section>
+      <section id="app-testimoni" class="page"></section>
+      <section id="app-cekBi" class="page"></section>
+      <section id="app-ppjb" class="page"></section>
+      <section id="app-formService" class="page"></section>
+      <section id="app-desainDokumen" class="page"></section>
+      <section id="app-penagihan" class="page"></section>
+      <section id="app-rekanan" class="page"></section>
+      <section id="app-notifWa" class="page"></section>
+      <section id="app-crm" class="page"></section>
+    </div>
+  </main>
+</div>
+
+<!-- ══════════════ MODAL ══════════════ -->
+<div class="modal fade" id="modalUmum" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalUmumTitle">Judul</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalUmumBody"></div>
+      <div class="modal-footer" id="modalUmumFooter">
+        <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalPreview" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="previewTitle">Pratinjau Dokumen</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center" id="previewBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i> Tutup</button>
+        <a id="previewDownload" href="#" target="_blank" class="btn btn-brand"><i class="bi bi-download"></i> Unduh</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalKonfirmasi" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-body text-center pt-4">
+        <i class="bi bi-exclamation-triangle" style="font-size:2.2rem;color:var(--accent)"></i>
+        <h6 class="font-head mt-2" id="konfirmasiTitle">Konfirmasi</h6>
+        <p class="text-muted-2 mb-0" id="konfirmasiPesan">Yakin melanjutkan?</p>
+      </div>
+      <div class="modal-footer border-0 justify-content-center pb-4">
+        <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-brand btn-sm" id="konfirmasiOk">Ya, Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ TOAST ══════════════ -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1090">
+  <div id="appToast" class="toast toast-lux" role="alert">
+    <div class="toast-header bg-transparent border-0 pb-0">
+      <strong class="me-auto" id="toastTitle">Notifikasi</strong>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="toast"></button>
+    </div>
+    <div class="toast-body pt-1" id="toastBody"></div>
+  </div>
+</div>
+
+<!-- Bootstrap JS & Chart.js dimuat oleh pemuat pustaka di <head> (dengan CDN cadangan) -->
+<script src="js/config.js?v=6.0"></script>
+<script src="js/api.js?v=6.0"></script>
+<script src="js/app.js?v=6.0"></script>
+</body>
+</html>
