@@ -1,4 +1,4 @@
-# 🚀 Panduan Memasang E-Catalog Properti di GitHub Pages (v6.0)
+# 🚀 Panduan Memasang E-Catalog Properti di GitHub Pages / Vercel (v6.1)
 
 Setelah selesai, aplikasi bisa dibuka di **`https://USERNAME.github.io/e-catalog-properti/`**. Tampilan, menu, dan fitur sama persis dengan versi Apps Script. Database tetap di Google Sheets & Drive yang sama.
 
@@ -15,7 +15,7 @@ Alamat `/exec` lama **tetap berfungsi**. Anda bisa memakai keduanya bersamaan, l
 ## Tahap 1 — Perbarui server Apps Script (± 3 menit)
 
 1. Buka proyek Apps Script E-Catalog → berkas **Kode** → hapus semua isinya → tempel isi **`E-Catalog_1-Kode.gs.txt`** → **Ctrl + S**.
-   Index, Stylesheet, dan JavaScript **tidak berubah** dari v5.4, jadi tidak perlu disalin ulang.
+   Untuk v6.1 salin juga **JavaScript** dan **Stylesheet** (versi `/exec` tetap dipakai sebagai cadangan).
 2. **Deploy → Manage deployments** → klik ikon **pensil ✏️** pada deployment yang sudah ada.
 3. Pastikan:
 
@@ -123,6 +123,22 @@ git commit -m "Update ke versi baru"
 git push
 ```
 Tunggu 1–2 menit → **Ctrl + Shift + R**.
+
+---
+
+## Memakai Vercel (bukan GitHub Pages)
+
+Isi folder `e-catalog-properti` sama persis untuk Vercel: berkas statis biasa, tanpa proses build.
+
+- **Lewat GitHub (disarankan):** push folder seperti Tahap 4, lalu di vercel.com pilih **Add New → Project → Import** repository `e-catalog-properti`.
+  - **Framework Preset:** *Other*
+  - **Build Command:** kosong
+  - **Output Directory:** kosong / `.`
+  - Klik **Deploy**.
+  - Setiap `git push` berikutnya otomatis ter-deploy ulang.
+- **Tanpa GitHub:** di vercel.com, tarik (drag & drop) folder `e-catalog-properti` ke halaman **Deploy**.
+- `js/config.js` tetap wajib berisi `GAS_URL` milik Anda.
+- **Integrasi aplikasi Kontraktor, SiKeu, dan notifikasi WhatsApp tetap berjalan.** Semuanya terjadi di server Apps Script, bukan di Vercel. Yang perlu dipastikan hanya **Kode.gs versi terbaru** sudah di-deploy (New version).
 
 ---
 

@@ -1115,3 +1115,7 @@ a, button, .btn, [onclick], .chip, .filter-chip, label, select { touch-action: m
 @media (max-width: 575.98px) {
   .ntf-tabs .btn { flex: 1 1 calc(50% - .5rem); }
 }
+
+/* ── v6.1 Progres Rumah ── */
+.kp-bar { height: 7px; border-radius: 99px; background: var(--border); overflow: hidden; margin-top: .25rem; }
+.kp-bar span { display: block; height: 100%; border-radius: 99px; transition: width .4s; }

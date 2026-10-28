@@ -1840,6 +1840,7 @@ function menuUntukRole(role) {
       { id: 'dashboard', i: 'grid-1x2', t: 'Dashboard' },
       { id: 'pilihProyek', i: 'people', t: 'Data Konsumen' },
       { id: 'siteplan', i: 'map', t: 'Siteplan' },                            // v5.0
+      { id: 'progresRumah', i: 'bricks', t: 'Progres Rumah' },               // v6.1
       { id: 'cekBi', i: 'shield-check', t: 'Cek ID BI' },
       { id: 'uploadBerkas', i: 'file-earmark-arrow-up', t: 'Upload Berkas' },
       { id: 'indentBank', i: 'hourglass-split', t: 'Data Indent' },          // v4.9.3
@@ -1853,6 +1854,7 @@ function menuUntukRole(role) {
       { id: 'dashboard', i: 'grid-1x2', t: 'Dashboard' },
       { id: 'pilihProyek', i: 'people', t: 'Data Konsumen' },
       { id: 'siteplan', i: 'map', t: 'Siteplan' },                            // v5.0
+      { id: 'progresRumah', i: 'bricks', t: 'Progres Rumah' },               // v6.1
       { id: 'indent', i: 'hourglass-split', t: 'Data Indent' },
       { id: 'spr', i: 'file-earmark-text', t: 'SPR' },
       { id: 'ppjb', i: 'file-earmark-ruled', t: 'PPJB' },
@@ -1875,6 +1877,7 @@ function menuUntukRole(role) {
     { id: 'dashboard', i: 'grid-1x2', t: 'Dashboard' },
     { id: 'pilihProyek', i: 'people', t: 'Data Konsumen' },
     { id: 'siteplan', i: 'map', t: 'Siteplan' },                              // v5.0
+    { id: 'progresRumah', i: 'bricks', t: 'Progres Rumah' },                 // v6.1
     { id: 'indent', i: 'hourglass-split', t: 'Data Indent' },
     { id: 'spr', i: 'file-earmark-text', t: 'SPR' },
     { id: 'ppjb', i: 'file-earmark-ruled', t: 'PPJB' },
@@ -1922,6 +1925,7 @@ function menuTerkunci() {
 
 function masukDashboard() {
   try { App.ntf.info = null; App.ntf.antrean = null; App.ntf.blast = null; App.crm.kontak = null; App.crm.pilih = {}; } catch (e) { /* v5.3 */ }
+  try { App.kp = null; App.kpKonfig = null; } catch (e) { /* v6.1 */ }
   tampilkanView('viewApp');
   renderSidebar();
   muatWorkspace(true);
@@ -2027,7 +2031,8 @@ const JUDUL_HALAMAN = {
   testimoni: 'Testimoni Konsumen', cekBi: 'Cek ID BI Konsumen',
   ppjb: 'PPJB — Perjanjian Pengikatan Jual Beli', formService: 'Form Service', desainDokumen: 'Desain Form Service, PPJB & Penagihan',
   penagihan: 'Penagihan DP & Biaya Akad', rekanan: 'Rekap Rekanan Bank',
-  notifWa: 'WhatsApp & Notifikasi', crm: 'CRM Kontak'                            // v5.3
+  notifWa: 'WhatsApp & Notifikasi', crm: 'CRM Kontak',                           // v5.3
+  progresRumah: 'Progres Rumah'                                                  // v6.1
 };
 
 /** Router internal — 0ms, tanpa reload & tanpa parameter URL. */
@@ -2058,7 +2063,8 @@ function goApp(halaman, tetapPosisi) {
     desainDokumen: renderDesainDokumen, penagihan: renderPenagihan, rekanan: renderRekanan,
     siteplan: renderSiteplan,                                                      // v5.0
     pembayaran: renderPembayaran,                                                  // v5.1
-    notifWa: renderNotifWa, crm: renderCrm                                         // v5.3
+    notifWa: renderNotifWa, crm: renderCrm,                                        // v5.3
+    progresRumah: renderProgresRumah                                               // v6.1
   };
   if (perender[halaman]) jalankanAman(perender[halaman], el, halaman);
   if (tetapPosisi) window.scrollTo(0, posisiGulir);
@@ -3541,11 +3547,13 @@ function formJadwalAkad(idTransaksi) {
       ' • Harga unit: ' + rp(t.harga) +
       (t.berkas.plafon > 0 ? ' • Plafon disetujui: <b style="color:var(--primary)">' + rp(t.berkas.plafon) + '</b>' : '') +
       '</div></div></div>' +
+    '<div id="akProgres"></div>' +                                                                                  // v6.1
     '<div class="alert mt-3 mb-0" style="background:var(--warning-bg);border:none;color:var(--warning);font-size:.82rem">' +
       '<i class="bi bi-exclamation-triangle"></i> Menyimpan jadwal akan mengubah status kavling menjadi <b>Terjual</b>.</div>',
     '<button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button>' +
     '<button class="btn btn-brand" id="btnAkad" onclick="simpanJadwalAkad(\'' + idTransaksi + '\')"><i class="bi bi-check2"></i> Simpan Jadwal</button>',
     'modal-md');
+  panelProgresAkad(t);                                                                                             // v6.1
 }
 
 function simpanJadwalAkad(idTransaksi) {
@@ -3559,6 +3567,8 @@ function simpanJadwalAkad(idTransaksi) {
     plafon: (document.getElementById('akPlafon').value || '').replace(/[^0-9]/g, ''),
     catatan: document.getElementById('akCatatan').value
   };
+  const abaikan = document.getElementById('akAbaikan');                                                        // v6.1
+  if (abaikan && abaikan.checked) { payload.abaikanProgres = true; payload.alasanAbaikan = (document.getElementById('akAlasan') || {}).value || ''; }
   const btn = document.getElementById('btnAkad');
   tombolLoading(btn, true);
 
@@ -3906,19 +3916,21 @@ function renderJadwalAkad() {
     '<div class="card-lux p-3 p-md-4">' +
       '<h5 class="mb-3">Daftar Nasabah &amp; Jadwal Akad</h5>' +
       '<div class="table-wrap" style="border:none"><table class="table-lux"><thead><tr>' +
-        '<th>Nasabah</th><th>Unit</th><th>Status Berkas</th><th>Tanggal Akad</th><th>Lokasi</th><th class="text-end">Aksi</th>' +
+        '<th>Nasabah</th><th>Unit</th><th>Status Berkas</th>' + (kpTampil() ? '<th style="min-width:130px">Progres Rumah</th>' : '') + '<th>Tanggal Akad</th><th>Lokasi</th><th class="text-end">Aksi</th>' +
       '</tr></thead><tbody>' +
       (kpr.length ? kpr.map(function (t) {
         const p = App.proyek.find(function (x) { return x.id === t.idProyek; }) || {};
         return '<tr><td><b>' + esc(t.nama) + '</b><div class="text-muted-2" style="font-size:.76rem">' + esc(t.hp) + '</div></td>' +
           '<td>' + esc(p.nama || '') + '<div class="text-muted-2" style="font-size:.76rem">Blok ' + esc(t.blok) + '-' + esc(t.nomor) + '</div></td>' +
           '<td><span class="chip ' + chipStatus(t.berkas.status || 'Diajukan') + '">' + esc(t.berkas.status || 'Diajukan') + '</span></td>' +
+          (kpTampil() ? '<td>' + htmlProgresMini(t.idKavling) + '</td>' : '') +                                            // v6.1
           '<td>' + (t.berkas.tanggalAkad ? '<b>' + tglIndo(t.berkas.tanggalAkad) + '</b><div class="text-muted-2" style="font-size:.76rem">' + esc(t.berkas.waktuAkad || '') + '</div>' : '<span class="text-muted-2">Belum dijadwalkan</span>') + '</td>' +
           '<td style="font-size:.82rem">' + esc(t.berkas.lokasiAkad || '-') + '</td>' +
           '<td class="text-end"><button class="btn btn-sm btn-outline-brand" onclick="formJadwalAkad(\'' + t.id + '\')">' +
           '<i class="bi bi-calendar-event"></i> ' + (t.berkas.tanggalAkad ? 'Ubah' : 'Jadwalkan') + '</button></td></tr>';
-      }).join('') : '<tr><td colspan="6" class="text-center text-muted-2 py-4">Belum ada pengajuan KPR.</td></tr>') +
-      '</tbody></table></div></div>';
+      }).join('') : '<tr><td colspan="7" class="text-center text-muted-2 py-4">Belum ada pengajuan KPR.</td></tr>') +
+      '</tbody></table></div>' + (kpTampil() ? '<div class="text-muted-2 mt-2" style="font-size:.78rem"><i class="bi bi-bricks"></i> Akad dapat dijadwalkan bila progres rumah ≥ <b>' + App.kp.ambang + '%</b>' + (App.kp.wajib ? '' : ' (informasi saja — syarat tidak diwajibkan)') + '. Data dari aplikasi Kontraktor.</div>' : '') + '</div>';
+  kpPastikan(function () { if (App.appPage === 'jadwalAkad') renderJadwalAkad(); });                                     // v6.1
 }
 
 
@@ -5630,7 +5642,9 @@ function renderKonfigurasi() {
         '<small class="text-muted-2 d-block mt-2"><i class="bi bi-journal-text"></i> Setiap penghapusan, perubahan, dan pindah unit tercatat di sheet <b>Log_Aktivitas</b> beserta nama pelaku dan alasannya.</small>' +
       '</div></div>' +
     '</div>' +
-    '<button class="btn btn-brand mt-3" id="btnCfg" onclick="simpanKonfigurasiUi()"><i class="bi bi-save"></i> Simpan Konfigurasi</button>';
+    '<button class="btn btn-brand mt-3" id="btnCfg" onclick="simpanKonfigurasiUi()"><i class="bi bi-save"></i> Simpan Konfigurasi</button>' +
+    '<div id="kpKonfig" class="mt-4" style="max-width:900px"></div>';                 // v6.1 — integrasi aplikasi Kontraktor
+  muatKonfigKontraktor();
 }
 
 function simpanKonfigurasiUi() {
@@ -11350,4 +11364,343 @@ function tesGrupProyekNtf(pid, btn) {
     tombolLoading(btn, false, '<i class="bi bi-send"></i> Tes');
     showToast(res.success ? 'Terkirim' : 'Gagal', res.success ? 'Pesan uji terkirim ke grup ' + g.nama + '.' : res.message, res.success ? 'success' : 'danger');
   }).catch(function (err) { tombolLoading(btn, false, '<i class="bi bi-send"></i> Tes'); showToast('Error', err.message, 'danger'); });
+}
+
+
+// ════════ v6.1 — PROGRES RUMAH (integrasi aplikasi Kontraktor) ════════
+// Data progres fisik per unit diambil SERVER E-Catalog dari aplikasi Kontraktor
+// (kunci rahasia tidak pernah ke browser). Hanya untuk pengguna internal yang login.
+
+App.kp = null;            // hasil getProgresRumah: { aktif, wajib, ambang, terhubung, unit[], tahapan{}, ... }
+App.kpKonfig = null;      // pengaturan integrasi (Owner)
+
+(function () {
+  const ref = document.getElementById('app-indent');
+  if (ref && !document.getElementById('app-progresRumah')) {
+    const sec = ref.cloneNode(false);
+    sec.id = 'app-progresRumah';
+    sec.classList.remove('active');
+    ref.parentNode.appendChild(sec);
+  }
+})();
+
+/** Integrasi aktif & data sudah dimuat → kolom/panel progres boleh ditampilkan. */
+function kpTampil() { return !!(App.kp && App.kp.aktif && App.kp.terhubung); }
+
+function kpUnit(idKavling) {
+  if (!App.kp || !App.kp.unit) return null;
+  return App.kp.unit.find(function (u) { return u.idKavling === idKavling; }) || null;
+}
+
+/** Muat data progres sekali (di latar), lalu panggil lalu() bila ada data baru. */
+function kpPastikan(lalu, paksa) {
+  if (App.kp && !paksa && Date.now() - (App.kp._t || 0) < 300000) return;
+  if (App._kpMemuat) return;
+  App._kpMemuat = true;
+  return call('getProgresRumah', App.token, !!paksa).then(function (res) {
+    App._kpMemuat = false;
+    if (!res || !res.success) return;
+    const lama = App.kp;
+    res.data._t = Date.now();
+    App.kp = res.data;
+    if (lalu && (!lama || paksa || JSON.stringify(lama.unit) !== JSON.stringify(res.data.unit) || lama.aktif !== res.data.aktif)) lalu();
+  }).catch(function () { App._kpMemuat = false; });
+}
+
+function kpSiap(u) { return !!(u && u.kp && App.kp && u.kp.progres >= App.kp.ambang); }
+
+function warnaProgres(p) {
+  if (p >= 100) return 'var(--success)';
+  if (p >= ((App.kp && App.kp.ambang) || 80)) return '#1F8A70';
+  if (p >= 50) return 'var(--accent)';
+  return 'var(--primary)';
+}
+
+function htmlBarProgres(p) {
+  p = Math.max(0, Math.min(100, Number(p) || 0));
+  return '<div class="kp-bar"><span style="width:' + p + '%;background:' + warnaProgres(p) + '"></span></div>';
+}
+
+function htmlProgresMini(idKavling) {
+  const u = kpUnit(idKavling);
+  if (!u || !u.kp) return '<span class="text-muted-2" style="font-size:.78rem">' + (u && !u.proyekTerhubung ? 'Proyek belum dipetakan' : 'Belum terhubung') + '</span>';
+  return '<div style="font-size:.82rem"><b class="tabular">' + u.kp.progres + '%</b> ' +
+    (kpSiap(u) ? '<span class="chip chip-ok">Siap akad</span>' : '<span class="chip chip-warn">&lt; ' + App.kp.ambang + '%</span>') +
+    htmlBarProgres(u.kp.progres) + '</div>';
+}
+
+// ── Halaman Progres Rumah ──
+function renderProgresRumah() {
+  const el = document.getElementById('app-progresRumah');
+  if (!el) return;
+  if (!App.kp) {
+    el.innerHTML = '<p class="text-muted-2">Memuat progres pembangunan dari aplikasi Kontraktor…</p>' + skeleton(80, 4);
+    kpPastikan(function () { if (App.appPage === 'progresRumah') renderProgresRumah(); }, false);
+    return;
+  }
+  const d = App.kp;
+  if (!d.aktif || !d.terhubung) {
+    el.innerHTML = '<p class="text-muted-2">Progres fisik setiap unit rumah dari aplikasi Kontraktor.</p>' +
+      '<div class="card-lux p-4 text-center" style="max-width:640px">' +
+        '<i class="bi bi-plug" style="font-size:2rem;color:var(--primary)"></i>' +
+        '<h5 class="mt-2">' + (d.aktif ? 'Aplikasi Kontraktor belum bisa dihubungi' : 'Integrasi aplikasi Kontraktor belum aktif') + '</h5>' +
+        '<p class="text-muted-2" style="font-size:.88rem">' + esc(d.pesan || '') + '</p>' +
+        (d.bisaAtur ? '<button class="btn btn-brand" onclick="goApp(\'konfigurasi\');setTimeout(function(){var x=document.getElementById(\'kpKonfig\');if(x)x.scrollIntoView({behavior:\'smooth\'});},400)"><i class="bi bi-gear"></i> Atur di Konfigurasi Sistem</button>'
+          : '<p class="text-muted-2 mb-0" style="font-size:.84rem">Minta Owner mengaktifkan di <b>Konfigurasi Sistem → Integrasi Aplikasi Kontraktor</b>.</p>') +
+        (d.aktif ? '<div class="mt-3"><button class="btn btn-sm btn-outline-brand" id="btnKpSegar" onclick="segarkanProgres()"><i class="bi bi-arrow-repeat"></i> Coba Lagi</button></div>' : '') +
+      '</div>';
+    return;
+  }
+  const semua = d.unit;
+  const terhubung = semua.filter(function (u) { return u.kp; });
+  const siap = terhubung.filter(kpSiap);
+  const rata = terhubung.length ? Math.round(terhubung.reduce(function (a, u) { return a + u.kp.progres; }, 0) / terhubung.length * 10) / 10 : 0;
+  const kpi = [
+    { l: 'Siap Akad', v: siap.length, s: 'unit progres ≥ ' + d.ambang + '%', i: 'check2-circle', g: 'is-ok' },
+    { l: 'Menunggu Pembangunan', v: terhubung.length - siap.length, s: 'unit < ' + d.ambang + '%', i: 'hourglass-split', g: 'is-warn' },
+    { l: 'Rata-rata Progres', v: rata + '%', s: terhubung.length + ' unit terhubung', i: 'bricks', g: 'is-brand' },
+    { l: 'Belum Terhubung', v: semua.length - terhubung.length, s: 'kavling tanpa data Kontraktor', i: 'plug', g: 'is-gold' }
+  ];
+  const f = App.kpFilter || (App.kpFilter = { proyek: '', status: '', q: '' });
+  el.innerHTML =
+    '<p class="text-muted-2">Progres fisik setiap unit rumah, langsung dari aplikasi Kontraktor. Akad dapat dijadwalkan bila progres ≥ <b>' + d.ambang + '%</b>' +
+      (d.wajib ? '' : ' <span class="chip chip-soft">informasi saja</span>') + '.</p>' +
+    (d.peringatan ? '<div class="alert alert-warning py-2" style="font-size:.84rem"><i class="bi bi-exclamation-triangle"></i> ' + esc(d.peringatan) + '</div>' : '') +
+    '<div class="row g-2 g-md-3 mb-3">' + kpi.map(function (k) {
+      return '<div class="col-6 col-lg-3"><div class="kpi-tile ' + k.g + '"><div class="kpi-ic"><i class="bi bi-' + k.i + '"></i></div>' +
+        '<div style="min-width:0"><div class="kpi-lbl">' + esc(k.l) + '</div><div class="kpi-val">' + esc(String(k.v)) + '</div><div class="kpi-sub">' + esc(k.s) + '</div></div></div></div>';
+    }).join('') + '</div>' +
+    '<div class="card-lux p-3 mb-3 d-flex flex-wrap gap-2 align-items-center">' +
+      '<div class="input-group" style="max-width:240px"><span class="input-group-text"><i class="bi bi-search"></i></span>' +
+        '<input class="form-control" id="kpCari" value="' + esc(f.q) + '" placeholder="Cari blok / konsumen…" oninput="App.kpFilter.q=this.value;tundaCari(renderTabelProgres)"></div>' +
+      '<select class="form-select" style="max-width:220px" onchange="App.kpFilter.proyek=this.value;renderTabelProgres()"><option value="">Semua Proyek</option>' +
+        (d.proyek || []).map(function (p) { return '<option value="' + esc(p.id) + '"' + (f.proyek === p.id ? ' selected' : '') + '>' + esc(p.nama) + '</option>'; }).join('') + '</select>' +
+      '<select class="form-select" style="max-width:220px" onchange="App.kpFilter.status=this.value;renderTabelProgres()">' +
+        [['', 'Semua Unit'], ['konsumen', 'Unit dengan konsumen'], ['siap', 'Siap akad'], ['belum', 'Menunggu pembangunan'], ['putus', 'Belum terhubung']]
+          .map(function (o) { return '<option value="' + o[0] + '"' + (f.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+      '<button class="btn btn-sm btn-outline-brand ms-auto" id="btnKpSegar" onclick="segarkanProgres()"><i class="bi bi-arrow-repeat"></i> Ambil Data Terbaru</button>' +
+    '</div>' +
+    '<div class="table-wrap"><table class="table-lux"><thead><tr>' +
+      '<th>Unit</th><th>Konsumen</th><th style="min-width:150px">Progres Fisik</th><th>Tahap Berjalan</th><th>Update Lapangan</th><th>Kesiapan Akad</th><th class="text-end">Detail</th>' +
+    '</tr></thead><tbody id="tbodyKp"></tbody></table></div>' +
+    '<div class="text-muted-2 mt-2" style="font-size:.76rem">Diambil: ' + esc(d.diambil || '-') + ' · data disimpan sementara 10 menit.</div>';
+  renderTabelProgres();
+}
+
+function renderTabelProgres() {
+  const tb = document.getElementById('tbodyKp');
+  if (!tb || !App.kp) return;
+  const f = App.kpFilter || {};
+  const q = String(f.q || '').toLowerCase();
+  const nmProyek = {}; (App.kp.proyek || []).forEach(function (p) { nmProyek[p.id] = p.nama; });
+  const list = App.kp.unit.filter(function (u) {
+    if (f.proyek && u.idProyek !== f.proyek) return false;
+    if (f.status === 'konsumen' && !u.konsumen) return false;
+    if (f.status === 'siap' && !kpSiap(u)) return false;
+    if (f.status === 'belum' && (!u.kp || kpSiap(u))) return false;
+    if (f.status === 'putus' && u.kp) return false;
+    if (q && (u.blok + '-' + u.nomor + ' ' + (u.konsumen ? u.konsumen.nama : '') + ' ' + (nmProyek[u.idProyek] || '')).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  }).sort(function (a, b) {
+    return String(nmProyek[a.idProyek] || '').localeCompare(String(nmProyek[b.idProyek] || '')) ||
+      String(a.blok).localeCompare(String(b.blok), 'id', { numeric: true }) || String(a.nomor).localeCompare(String(b.nomor), 'id', { numeric: true });
+  });
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted-2 py-4">Tidak ada unit.</td></tr>'; return; }
+  tb.innerHTML = list.map(function (u) {
+    const k = u.konsumen;
+    return '<tr><td><b>Blok ' + esc(u.blok) + '-' + esc(u.nomor) + '</b><div class="text-muted-2" style="font-size:.76rem">' + esc(nmProyek[u.idProyek] || '') + (u.tipe ? ' · Tipe ' + esc(u.tipe) : '') + '</div></td>' +
+      '<td>' + (k ? '<b style="font-size:.86rem">' + esc(k.nama) + '</b><div class="text-muted-2" style="font-size:.74rem">' + esc(k.metode) + (k.statusBerkas ? ' · ' + esc(k.statusBerkas) : '') + (k.tanggalAkad ? ' · akad ' + esc(tglIndo(k.tanggalAkad)) : '') + '</div>'
+        : '<span class="text-muted-2" style="font-size:.8rem">' + esc(u.statusKavling || '-') + '</span>') + '</td>' +
+      '<td>' + (u.kp ? '<b class="tabular">' + u.kp.progres + '%</b> <span class="text-muted-2" style="font-size:.74rem">' + esc(u.kp.status || '') + '</span>' + htmlBarProgres(u.kp.progres)
+        : '<span class="text-muted-2" style="font-size:.8rem">' + (u.proyekTerhubung ? 'Belum terhubung' : 'Proyek belum dipetakan') + '</span>') + '</td>' +
+      '<td style="font-size:.82rem">' + (u.kp ? esc(u.kp.tahap || '-') : '-') + '</td>' +
+      '<td style="font-size:.8rem">' + (u.kp && u.kp.update ? esc(String(u.kp.update).substring(0, 16)) : '-') + (u.kp && u.kp.target ? '<div class="text-muted-2">target ' + esc(String(u.kp.target).substring(0, 10)) + '</div>' : '') + '</td>' +
+      '<td>' + (!u.kp ? '<span class="chip">-</span>' : kpSiap(u) ? '<span class="chip chip-ok">Siap akad</span>' : '<span class="chip chip-warn">Belum ' + App.kp.ambang + '%</span>') + '</td>' +
+      '<td class="text-end">' + (u.kp ? '<button class="btn btn-sm btn-ghost" onclick="detailProgres(\'' + escJs(u.idKavling) + '\')"><i class="bi bi-eye"></i></button>' : '') + '</td></tr>';
+  }).join('');
+}
+
+function segarkanProgres() {
+  const btn = document.getElementById('btnKpSegar');
+  tombolLoading(btn, true);
+  call('getProgresRumah', App.token, true).then(function (res) {
+    tombolLoading(btn, false, '<i class="bi bi-arrow-repeat"></i> Ambil Data Terbaru');
+    if (!res.success) { showToast('Gagal', res.message, 'danger'); return; }
+    res.data._t = Date.now(); App.kp = res.data;
+    showToast(res.data.terhubung ? 'Diperbarui' : 'Belum Terhubung', res.data.terhubung ? 'Data progres terbaru dari aplikasi Kontraktor.' : (res.data.pesan || ''), res.data.terhubung ? 'success' : 'warning');
+    if (App.appPage === 'progresRumah') renderProgresRumah(); else if (App.appPage === 'jadwalAkad') renderJadwalAkad();
+  }).catch(function (err) { tombolLoading(btn, false, '<i class="bi bi-arrow-repeat"></i> Ambil Data Terbaru'); showToast('Error', err.message, 'danger'); });
+}
+
+function detailProgres(idKavling) {
+  const u = kpUnit(idKavling);
+  if (!u || !u.kp) return;
+  const nm = ((App.kp.proyek || []).find(function (p) { return p.id === u.idProyek; }) || {}).nama || '';
+  const th = (App.kp.tahapan || {})[u.idProyek] || [];
+  openModal('Progres Rumah — Blok ' + u.blok + '-' + u.nomor,
+    '<div class="d-flex flex-wrap gap-3 align-items-center mb-3">' +
+      '<div style="font-size:2rem;font-weight:700;color:' + warnaProgres(u.kp.progres) + '" class="tabular">' + u.kp.progres + '%</div>' +
+      '<div style="flex:1;min-width:200px"><b>' + esc(nm) + '</b> · ' + esc(u.kp.kode || ('Blok ' + u.blok + '-' + u.nomor)) +
+        '<div class="text-muted-2" style="font-size:.82rem">' + esc(u.kp.status || '') + ' · tahap berjalan: ' + esc(u.kp.tahap || '-') +
+        (u.kp.update ? ' · update lapangan ' + esc(String(u.kp.update).substring(0, 16)) : '') + (u.kp.target ? ' · target selesai ' + esc(String(u.kp.target).substring(0, 10)) : '') + '</div>' +
+        htmlBarProgres(u.kp.progres) + '</div>' +
+      (kpSiap(u) ? '<span class="chip chip-ok">Siap akad</span>' : '<span class="chip chip-warn">Belum ' + App.kp.ambang + '%</span>') +
+    '</div>' +
+    (u.konsumen ? '<div class="card-flat p-2 mb-3" style="font-size:.84rem"><b>' + esc(u.konsumen.nama) + '</b> · ' + esc(u.konsumen.metode) +
+      (u.konsumen.statusBerkas ? ' · berkas ' + esc(u.konsumen.statusBerkas) : '') + (u.konsumen.tanggalAkad ? ' · akad ' + esc(tglIndo(u.konsumen.tanggalAkad)) : '') + '</div>' : '') +
+    '<div class="row g-3"><div class="col-md-7"><h6 class="font-head">Progres per Tahapan</h6>' +
+      (th.length ? th.map(function (t, i) {
+        const r = Number((u.kp.r || [])[i]) || 0;
+        return '<div class="mb-2"><div class="d-flex justify-content-between" style="font-size:.82rem"><span>' + esc(t.nama) + (t.bobot ? ' <span class="text-muted-2">(bobot ' + esc(String(t.bobot)) + ')</span>' : '') + '</span><b class="tabular">' + r + '%</b></div>' + htmlBarProgres(r) + '</div>';
+      }).join('') : '<div class="text-muted-2" style="font-size:.84rem">Tahapan belum diatur di aplikasi Kontraktor.</div>') +
+    '</div><div class="col-md-5"><h6 class="font-head">Foto Lapangan Terakhir</h6><div id="kpFoto">' +
+      (u.kp.adaFoto ? skeleton(160, 1) : '<div class="text-muted-2" style="font-size:.84rem">Belum ada foto.</div>') + '</div></div></div>',
+    '<button class="btn btn-ghost" data-bs-dismiss="modal">Tutup</button>', 'modal-lg');
+  if (u.kp.adaFoto) {
+    call('getFotoProgres', App.token, idKavling).then(function (res) {
+      const box = document.getElementById('kpFoto'); if (!box) return;
+      if (!res.success) { box.innerHTML = '<div class="text-muted-2" style="font-size:.84rem">' + esc(res.message) + '</div>'; return; }
+      box.innerHTML = (res.data.dataUrl ? '<img src="' + res.data.dataUrl + '" alt="Foto lapangan" style="width:100%;border-radius:12px;border:1px solid var(--border)">' :
+        '<div class="text-muted-2 mb-2" style="font-size:.84rem">' + esc(res.data.pesan || '') + '</div>') +
+        '<div class="d-flex justify-content-between mt-1" style="font-size:.78rem"><span class="text-muted-2">' + esc(res.data.tgl || '') + '</span>' +
+        '<a href="' + esc(res.data.tautan) + '" target="_blank" rel="noopener">Buka di Drive <i class="bi bi-box-arrow-up-right"></i></a></div>';
+    }).catch(function () { /* abaikan */ });
+  }
+}
+
+// ── Panel progres di form Jadwalkan Akad ──
+function panelProgresAkad(t) {
+  const box = document.getElementById('akProgres');
+  if (!box) return;
+  const gambar = function () {
+    const b = document.getElementById('akProgres'), btn = document.getElementById('btnAkad');
+    if (!b || !App.kp || !App.kp.aktif) { if (b) b.innerHTML = ''; return; }
+    if (!App.kp.terhubung) {
+      b.innerHTML = '<div class="alert alert-warning py-2 mt-3 mb-0" style="font-size:.82rem"><i class="bi bi-plug"></i> Progres rumah tidak bisa diperiksa: ' + esc(App.kp.pesan || '') + '</div>';
+      return;
+    }
+    const u = kpUnit(t.idKavling), sudah = !!t.berkas.tanggalAkad;
+    const ok = kpSiap(u) || !App.kp.wajib || sudah;
+    const owner = App.sesi && App.sesi.role === 'Owner';
+    b.innerHTML = '<div class="card-flat p-3 mt-3" style="border-left:4px solid ' + (ok ? 'var(--success)' : 'var(--danger)') + '">' +
+      '<div class="d-flex justify-content-between align-items-center" style="font-size:.86rem"><b><i class="bi bi-bricks"></i> Progres Rumah</b>' +
+        (u && u.kp ? '<b class="tabular" style="color:' + warnaProgres(u.kp.progres) + '">' + u.kp.progres + '%</b>' : '<span class="text-muted-2">belum terhubung</span>') + '</div>' +
+      (u && u.kp ? htmlBarProgres(u.kp.progres) + '<div class="text-muted-2 mt-1" style="font-size:.76rem">Tahap: ' + esc(u.kp.tahap || '-') + (u.kp.update ? ' · update ' + esc(String(u.kp.update).substring(0, 16)) : '') + '</div>' : '') +
+      '<div class="mt-2" style="font-size:.8rem;color:' + (ok ? 'var(--success)' : 'var(--danger)') + '">' +
+        (kpSiap(u) ? '✓ Memenuhi syarat progres minimal ' + App.kp.ambang + '%.' :
+          sudah ? 'Jadwal ulang akad diizinkan.' :
+          !App.kp.wajib ? 'Syarat progres tidak diwajibkan — hanya informasi.' :
+          '✕ Akad belum bisa dijadwalkan: progres minimal ' + App.kp.ambang + '%' + (u && u.kp ? '' : ' (unit belum terhubung dengan aplikasi Kontraktor)') + '.') + '</div>' +
+      (!ok && owner ? '<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="akAbaikan" onchange="kunciTombolAkad()">' +
+        '<label class="form-check-label" for="akAbaikan" style="font-size:.82rem">Abaikan syarat progres (pengecualian Owner — tercatat)</label></div>' +
+        '<input class="form-control form-control-sm mt-1" id="akAlasan" placeholder="Alasan pengecualian (wajib)" oninput="kunciTombolAkad()">' : '') +
+    '</div>';
+    App._akSyaratOk = ok;
+    kunciTombolAkad();
+  };
+  App._akSyaratOk = true;
+  gambar();
+  kpPastikan(gambar, true);
+}
+
+function kunciTombolAkad() {
+  const btn = document.getElementById('btnAkad'); if (!btn) return;
+  const ab = document.getElementById('akAbaikan'), al = document.getElementById('akAlasan');
+  const boleh = App._akSyaratOk !== false || (ab && ab.checked && al && al.value.trim().length >= 3);
+  btn.disabled = !boleh;
+  btn.title = boleh ? '' : 'Progres rumah belum memenuhi syarat minimal';
+}
+
+// ── Konfigurasi Sistem → Integrasi Aplikasi Kontraktor (Owner) ──
+function muatKonfigKontraktor() {
+  const box = document.getElementById('kpKonfig');
+  if (!box || !App.sesi || App.sesi.role !== 'Owner') return;
+  if (App.kpKonfig) { renderKonfigKontraktor(); return; }
+  box.innerHTML = skeleton(60, 1);
+  call('getKontraktorConfig', App.token).then(function (res) {
+    if (!res.success) { box.innerHTML = '<div class="text-muted-2">' + esc(res.message) + '</div>'; return; }
+    App.kpKonfig = res.data; renderKonfigKontraktor();
+  }).catch(function (err) { box.innerHTML = '<div class="text-muted-2">' + esc(err.message) + '</div>'; });
+}
+
+function renderKonfigKontraktor() {
+  const box = document.getElementById('kpKonfig'), c = App.kpKonfig;
+  if (!box || !c) return;
+  const uji = App.kpUji;
+  box.innerHTML = '<div class="card-lux p-3 p-md-4">' +
+    '<h5 class="mb-1"><i class="bi bi-bricks"></i> Integrasi Aplikasi Kontraktor</h5>' +
+    '<p class="text-muted-2" style="font-size:.84rem">Menampilkan progres fisik setiap unit rumah dari aplikasi Kontraktor (menu <b>Progres Rumah</b>), dan mengunci penjadwalan akad sampai progres minimal tercapai. Ambil URL &amp; kunci di aplikasi Kontraktor → <b>Pengaturan → Integrasi E-Catalog</b>.</p>' +
+    '<div class="row g-3">' +
+      '<div class="col-md-7"><label class="form-label">URL Web App aplikasi Kontraktor (/exec)</label>' +
+        '<input class="form-control" id="kpUrl" value="' + esc(c.url || '') + '" placeholder="https://script.google.com/macros/s/…/exec"></div>' +
+      '<div class="col-md-5"><label class="form-label">Kunci Integrasi' + (c.punyaKunci ? ' <span class="chip chip-ok">tersimpan …' + esc(c.kunciHint) + '</span>' : '') + '</label>' +
+        '<input type="password" class="form-control" id="kpKunci" autocomplete="off" placeholder="' + (c.punyaKunci ? 'Kosongkan bila tidak diubah' : 'Tempel kunci 64 karakter') + '"></div>' +
+      '<div class="col-md-4"><div class="form-check form-switch mt-md-4"><input class="form-check-input" type="checkbox" id="kpAktif"' + (c.aktif ? ' checked' : '') + '>' +
+        '<label class="form-check-label" for="kpAktif"><b>Aktifkan integrasi</b></label></div></div>' +
+      '<div class="col-md-5"><div class="form-check form-switch mt-md-4"><input class="form-check-input" type="checkbox" id="kpWajib"' + (c.wajib ? ' checked' : '') + '>' +
+        '<label class="form-check-label" for="kpWajib">Wajibkan progres minimal untuk akad</label></div></div>' +
+      '<div class="col-md-3"><label class="form-label">Progres minimal (%)</label><input type="number" min="1" max="100" class="form-control" id="kpAmbang" value="' + esc(String(c.ambang || 80)) + '"></div>' +
+    '</div>' +
+    '<div class="d-flex flex-wrap gap-2 mt-3">' +
+      '<button class="btn btn-outline-brand" id="btnKpUji" onclick="ujiKontraktorUi()"><i class="bi bi-plug"></i> Uji Koneksi &amp; Muat Proyek</button>' +
+      '<button class="btn btn-brand" id="btnKpSimpan" onclick="simpanKontraktorUi()"><i class="bi bi-save"></i> Simpan Integrasi</button>' +
+    '</div>' +
+    (c.terakhir ? '<div class="text-muted-2 mt-2" style="font-size:.76rem">Koneksi terakhir: ' + esc(c.terakhir.at || '') + ' — ' + (c.terakhir.ok ? '<span style="color:var(--success)">berhasil</span>' : '<span style="color:var(--danger)">' + esc(c.terakhir.pesan || 'gagal') + '</span>') + '</div>' : '') +
+    '<div id="kpUjiHasil" class="mt-3">' + (uji ? htmlPemetaanKontraktor() : '') + '</div>' +
+  '</div>';
+}
+
+function htmlPemetaanKontraktor() {
+  const u = App.kpUji, c = App.kpKonfig;
+  if (!u) return '';
+  return '<div class="alert py-2" style="background:var(--success-bg);border:none;color:var(--success);font-size:.84rem"><i class="bi bi-check-circle"></i> ' + esc(u.pesan) + '</div>' +
+    '<h6 class="font-head">Pemetaan Proyek</h6>' +
+    '<div class="table-wrap"><table class="table-lux"><thead><tr><th>Proyek E-Catalog</th><th>Proyek di aplikasi Kontraktor</th><th class="text-end">Unit cocok</th></tr></thead><tbody>' +
+    u.ringkas.map(function (r) {
+      const pilih = (c.peta || {})[r.id] || '';
+      return '<tr><td><b>' + esc(r.nama) + '</b></td><td><select class="form-select form-select-sm kp-peta" data-id="' + esc(r.id) + '">' +
+        '<option value=""' + (!pilih ? ' selected' : '') + '>Otomatis (nama sama)' + (!pilih && r.kontraktor ? ' → ' + esc(r.kontraktor) : '') + '</option>' +
+        u.proyekK.map(function (k) { return '<option value="' + esc(k.id) + '"' + (pilih === k.id ? ' selected' : '') + '>' + esc(k.nama) + (k.lokasi ? ' — ' + esc(k.lokasi) : '') + '</option>'; }).join('') +
+        '<option value="-"' + (pilih === '-' ? ' selected' : '') + '>— Tidak dihubungkan —</option></select></td>' +
+        '<td class="text-end tabular">' + (r.kontraktor ? r.cocok + ' / ' + r.kavling : '<span class="text-muted-2">belum dipetakan</span>') +
+        (r.kontraktor && r.cocok < r.kavling ? '<div class="text-muted-2" style="font-size:.72rem">' + (r.kavling - r.cocok) + ' belum terhubung</div>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    '<div class="text-muted-2 mt-1" style="font-size:.76rem">Unit dicocokkan berdasarkan <b>Blok + Nomor</b> (mis. Blok A No. 01 = kode A-01 = A1). Setelah mengubah pasangan, klik <b>Uji Koneksi</b> lagi untuk melihat jumlah unit cocok, lalu <b>Simpan Integrasi</b>.</div>';
+}
+
+function bacaPetaKontraktor() {
+  const peta = {};
+  document.querySelectorAll('#kpKonfig .kp-peta').forEach(function (s) { if (s.value) peta[s.dataset.id] = s.value; });
+  return document.querySelectorAll('#kpKonfig .kp-peta').length ? peta : (App.kpKonfig.peta || {});
+}
+
+function ujiKontraktorUi() {
+  const btn = document.getElementById('btnKpUji');
+  tombolLoading(btn, true);
+  const p = { url: document.getElementById('kpUrl').value.trim(), kunci: document.getElementById('kpKunci').value.trim(), peta: bacaPetaKontraktor() };
+  App.kpKonfig.peta = p.peta; App.kpKonfig.url = p.url;
+  call('ujiKontraktor', App.token, p).then(function (res) {
+    tombolLoading(btn, false, '<i class="bi bi-plug"></i> Uji Koneksi &amp; Muat Proyek');
+    const box = document.getElementById('kpUjiHasil');
+    if (!res.success) { App.kpUji = null; if (box) box.innerHTML = '<div class="alert alert-danger py-2" style="font-size:.84rem">' + esc(res.message) + '</div>'; return; }
+    App.kpUji = Object.assign(res.data, { pesan: res.message });
+    if (box) box.innerHTML = htmlPemetaanKontraktor();
+  }).catch(function (err) { tombolLoading(btn, false, '<i class="bi bi-plug"></i> Uji Koneksi &amp; Muat Proyek'); showToast('Error', err.message, 'danger'); });
+}
+
+function simpanKontraktorUi() {
+  const btn = document.getElementById('btnKpSimpan');
+  const p = {
+    url: document.getElementById('kpUrl').value.trim(), kunci: document.getElementById('kpKunci').value.trim(),
+    aktif: document.getElementById('kpAktif').checked, wajib: document.getElementById('kpWajib').checked,
+    ambang: Number(document.getElementById('kpAmbang').value) || 80, peta: bacaPetaKontraktor()
+  };
+  tombolLoading(btn, true);
+  call('simpanKontraktorConfig', App.token, p).then(function (res) {
+    tombolLoading(btn, false, '<i class="bi bi-save"></i> Simpan Integrasi');
+    if (!res.success) { showToast('Gagal', res.message, 'danger'); return; }
+    App.kpKonfig = res.data; App.kp = null;
+    renderKonfigKontraktor();
+    showToast('Berhasil', res.message + (res.data.aktif ? ' Menu Progres Rumah siap dipakai.' : ''), 'success');
+  }).catch(function (err) { tombolLoading(btn, false, '<i class="bi bi-save"></i> Simpan Integrasi'); showToast('Error', err.message, 'danger'); });
 }

@@ -1,4 +1,4 @@
-# E-Catalog Properti — Frontend GitHub Pages (v6.0)
+# E-Catalog Properti — Frontend GitHub Pages (v6.1)
 
 Folder ini adalah **frontend** E-Catalog Properti. Folder inilah yang di-`git init` dan di-push ke GitHub Pages.
 
