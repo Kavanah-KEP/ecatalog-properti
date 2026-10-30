@@ -1861,6 +1861,7 @@ function menuUntukRole(role) {
       { id: 'formService', i: 'tools', t: 'Form Service' },
       { id: 'penagihan', i: 'cash-coin', t: 'Penagihan Biaya Akad' },
       { id: 'pembayaran', i: 'wallet2', t: 'Pembayaran Konsumen' },           // v5.1
+      { id: 'feeMarketing', i: 'piggy-bank', t: 'Fee Marketing' },           // v6.2
       { g: 'Pengaturan' },
       { id: 'desainSpr', i: 'palette', t: 'Desain SPR' },
       { id: 'desainDokumen', i: 'file-earmark-richtext', t: 'Desain Service, PPJB & Tagihan' },
@@ -1884,6 +1885,7 @@ function menuUntukRole(role) {
     { id: 'formService', i: 'tools', t: 'Form Service' },
     { id: 'penagihan', i: 'cash-coin', t: 'Penagihan Biaya Akad' },
     { id: 'pembayaran', i: 'wallet2', t: 'Pembayaran Konsumen' },             // v5.1
+    { id: 'feeMarketing', i: 'piggy-bank', t: 'Fee Marketing' },             // v6.2
     { id: 'rekanan', i: 'person-badge', t: 'Rekap Rekanan Bank' },
     { id: 'laporan', i: 'bar-chart', t: 'Laporan Gabungan' },
     { id: 'crm', i: 'person-lines-fill', t: 'CRM Kontak' },                    // v5.3
@@ -1926,6 +1928,7 @@ function menuTerkunci() {
 function masukDashboard() {
   try { App.ntf.info = null; App.ntf.antrean = null; App.ntf.blast = null; App.crm.kontak = null; App.crm.pilih = {}; } catch (e) { /* v5.3 */ }
   try { App.kp = null; App.kpKonfig = null; } catch (e) { /* v6.1 */ }
+  try { App.fee = null; App.feePilih = {}; } catch (e) { /* v6.2 */ }
   tampilkanView('viewApp');
   renderSidebar();
   muatWorkspace(true);
@@ -2032,7 +2035,8 @@ const JUDUL_HALAMAN = {
   ppjb: 'PPJB — Perjanjian Pengikatan Jual Beli', formService: 'Form Service', desainDokumen: 'Desain Form Service, PPJB & Penagihan',
   penagihan: 'Penagihan DP & Biaya Akad', rekanan: 'Rekap Rekanan Bank',
   notifWa: 'WhatsApp & Notifikasi', crm: 'CRM Kontak',                           // v5.3
-  progresRumah: 'Progres Rumah'                                                  // v6.1
+  progresRumah: 'Progres Rumah',                                                 // v6.1
+  feeMarketing: 'Fee Marketing'                                                  // v6.2
 };
 
 /** Router internal — 0ms, tanpa reload & tanpa parameter URL. */
@@ -2064,7 +2068,8 @@ function goApp(halaman, tetapPosisi) {
     siteplan: renderSiteplan,                                                      // v5.0
     pembayaran: renderPembayaran,                                                  // v5.1
     notifWa: renderNotifWa, crm: renderCrm,                                        // v5.3
-    progresRumah: renderProgresRumah                                               // v6.1
+    progresRumah: renderProgresRumah,                                              // v6.1
+    feeMarketing: renderFeeMarketing                                               // v6.2
   };
   if (perender[halaman]) jalankanAman(perender[halaman], el, halaman);
   if (tetapPosisi) window.scrollTo(0, posisiGulir);
@@ -11703,4 +11708,379 @@ function simpanKontraktorUi() {
     renderKonfigKontraktor();
     showToast('Berhasil', res.message + (res.data.aktif ? ' Menu Progres Rumah siap dipakai.' : ''), 'success');
   }).catch(function (err) { tombolLoading(btn, false, '<i class="bi bi-save"></i> Simpan Integrasi'); showToast('Error', err.message, 'danger'); });
+}
+
+
+// ════════ v6.2 — FEE MARKETING (rekap & pengajuan ke SiKeu Properti) ════════
+App.fee = null;            // hasil getFeeMarketing
+App.feePilih = {};         // idFee → true (dipilih untuk diajukan)
+App.feeTab = 'konsumen';
+App.feeFilter = { proyek: '', marketing: '', status: '', q: '' };
+
+(function () {
+  const ref = document.getElementById('app-indent');
+  if (ref && !document.getElementById('app-feeMarketing')) {
+    const sec = ref.cloneNode(false);
+    sec.id = 'app-feeMarketing';
+    sec.classList.remove('active');
+    ref.parentNode.appendChild(sec);
+  }
+})();
+
+const CHIP_FEE = { 'Siap Diajukan': 'chip-soft', 'Diajukan': 'chip-gold', 'Dibayar': 'chip-ok', 'Belum Memenuhi Syarat': '', 'Belum Diatur': 'chip-warn' };
+
+function muatFee(lalu) {
+  return call('getFeeMarketing', App.token).then(function (res) {
+    if (!res.success) {
+      const el = document.getElementById('app-feeMarketing');
+      if (el && !App.fee) tampilkanKartuPulih(el, res.message, 'renderFeeMarketing()'); else showToast('Gagal', res.message, 'danger');
+      return;
+    }
+    terimaFee(res.data);
+    if (lalu) lalu(res);
+    else if (App.appPage === 'feeMarketing') renderFeeMarketing();
+  }).catch(function (err) {
+    const el = document.getElementById('app-feeMarketing');
+    if (el && !App.fee) tampilkanKartuPulih(el, err.message, 'renderFeeMarketing()');
+  });
+}
+
+function terimaFee(d) {
+  App.fee = d;
+  const ada = {};
+  d.rows.forEach(function (r) { [r.booking, r.akad].forEach(function (it) { if (it.status === 'Siap Diajukan') ada[it.id] = 1; }); });
+  Object.keys(App.feePilih).forEach(function (k) { if (!ada[k]) delete App.feePilih[k]; });
+}
+
+function semuaItemFee() {
+  const out = [];
+  ((App.fee && App.fee.rows) || []).forEach(function (r) { out.push({ r: r, it: r.booking }); out.push({ r: r, it: r.akad }); });
+  return out;
+}
+
+function renderFeeMarketing() {
+  const el = document.getElementById('app-feeMarketing');
+  if (!el) return;
+  if (!App.fee) { el.innerHTML = '<p class="text-muted-2">Memuat rekap fee marketing…</p>' + skeleton(80, 4); muatFee(); return; }
+  const d = App.fee, items = semuaItemFee();
+  const jml = function (st) { return items.filter(function (x) { return x.it.status === st; }); };
+  const total = function (arr) { return arr.reduce(function (a, x) { return a + (x.it.nominal || 0); }, 0); };
+  const bulan = isoHariIni().substring(0, 7);
+  const dibayarBulan = jml('Dibayar').filter(function (x) { return x.it.pengajuan && String(x.it.pengajuan.tglBayar || '').substring(0, 7) === bulan; });
+  const kpi = [
+    { l: 'Siap Diajukan', v: rpSingkat(total(jml('Siap Diajukan'))), s: jml('Siap Diajukan').length + ' fee memenuhi syarat', i: 'send', g: 'is-brand' },
+    { l: 'Menunggu Keuangan', v: rpSingkat(total(jml('Diajukan'))), s: jml('Diajukan').length + ' fee sudah diajukan', i: 'hourglass-split', g: 'is-gold' },
+    { l: 'Dibayar Bulan Ini', v: rpSingkat(total(dibayarBulan)), s: jml('Dibayar').length + ' fee dibayar seluruhnya', i: 'check2-circle', g: 'is-ok' },
+    { l: 'Belum Memenuhi Syarat', v: jml('Belum Memenuhi Syarat').length, s: jml('Belum Diatur').length + ' belum diatur nominalnya', i: 'clock', g: 'is-warn' }
+  ];
+  const tab = function (id, ikon, judul) {
+    return '<button class="btn btn-sm ' + (App.feeTab === id ? 'btn-brand' : 'btn-ghost') + '" onclick="App.feeTab=\'' + id + '\';renderFeeMarketing()"><i class="bi bi-' + ikon + '"></i> ' + judul + '</button>';
+  };
+  el.innerHTML =
+    '<p class="text-muted-2">Rekap <b>fee booking</b> dan <b>fee akad</b> marketing per konsumen. Fee yang memenuhi syarat bisa diajukan ke keuangan — pengajuan langsung masuk ke aplikasi <b>SiKeu Properti</b>, dan status pembayarannya kembali ke sini.</p>' +
+    '<div class="row g-2 g-md-3 mb-3">' + kpi.map(function (k) {
+      return '<div class="col-6 col-lg-3"><div class="kpi-tile ' + k.g + '"><div class="kpi-ic"><i class="bi bi-' + k.i + '"></i></div>' +
+        '<div style="min-width:0"><div class="kpi-lbl">' + esc(k.l) + '</div><div class="kpi-val">' + esc(String(k.v)) + '</div><div class="kpi-sub">' + esc(k.s) + '</div></div></div></div>';
+    }).join('') + '</div>' +
+    '<div class="d-flex flex-wrap gap-2 mb-3 ntf-tabs">' + tab('konsumen', 'people', 'Rekap per Konsumen') + tab('marketing', 'person-badge', 'Rekap per Marketing') +
+      tab('pengajuan', 'send-check', 'Pengajuan ke Keuangan') +
+      (d.bolehAtur ? '<button class="btn btn-sm btn-outline-brand ms-auto" onclick="formSetelanFee()"><i class="bi bi-gear"></i> Atur Fee per Proyek</button>' : '') + '</div>' +
+    '<div id="feeIsi"></div>';
+  if (App.feeTab === 'marketing') renderFeeMarketingTab();
+  else if (App.feeTab === 'pengajuan') renderFeePengajuanTab();
+  else renderFeeKonsumenTab();
+}
+
+function htmlSelFilterFee() {
+  const d = App.fee, f = App.feeFilter;
+  const mk = {}; d.rows.forEach(function (r) { mk[r.marketing] = 1; });
+  const pr = {}; d.rows.forEach(function (r) { if (r.proyek) pr[r.idProyek] = r.proyek; });
+  return '<div class="input-group" style="max-width:230px"><span class="input-group-text"><i class="bi bi-search"></i></span>' +
+      '<input class="form-control" id="feeCari" value="' + esc(f.q) + '" placeholder="Cari konsumen / unit…" oninput="App.feeFilter.q=this.value;tundaCari(renderTabelFee)"></div>' +
+    '<select class="form-select" style="max-width:200px" onchange="App.feeFilter.proyek=this.value;renderTabelFee()"><option value="">Semua Proyek</option>' +
+      Object.keys(pr).map(function (k) { return '<option value="' + esc(k) + '"' + (f.proyek === k ? ' selected' : '') + '>' + esc(pr[k]) + '</option>'; }).join('') + '</select>' +
+    (App.fee.bolehAjukan ? '<select class="form-select" style="max-width:190px" onchange="App.feeFilter.marketing=this.value;renderTabelFee()"><option value="">Semua Marketing</option>' +
+      Object.keys(mk).sort().map(function (k) { return '<option' + (f.marketing === k ? ' selected' : '') + '>' + esc(k) + '</option>'; }).join('') + '</select>' : '') +
+    '<select class="form-select" style="max-width:210px" onchange="App.feeFilter.status=this.value;renderTabelFee()">' +
+      [['', 'Semua Status'], ['Siap Diajukan', 'Siap diajukan'], ['Diajukan', 'Menunggu keuangan'], ['Dibayar', 'Dibayar'], ['Belum Memenuhi Syarat', 'Belum memenuhi syarat'], ['Belum Diatur', 'Belum diatur']]
+        .map(function (o) { return '<option value="' + o[0] + '"' + (f.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+}
+
+function renderFeeKonsumenTab() {
+  const box = document.getElementById('feeIsi'), d = App.fee;
+  box.innerHTML =
+    '<div class="card-lux p-3 mb-3 d-flex flex-wrap gap-2 align-items-center">' + htmlSelFilterFee() +
+      '<div class="ms-auto d-flex flex-wrap gap-2">' +
+        '<button class="btn btn-sm btn-ghost" onclick="muatFee()"><i class="bi bi-arrow-clockwise"></i> Muat Ulang</button>' +
+        '<button class="btn btn-sm btn-ghost" onclick="cetakRekapFee()"><i class="bi bi-printer"></i> Cetak Rekap</button>' +
+      '</div></div>' +
+    (d.bolehAjukan ? '<div class="card-flat p-2 mb-2 d-flex flex-wrap gap-2 align-items-center" id="feeBarPilih"></div>' : '') +
+    '<div class="table-wrap"><table class="table-lux"><thead><tr>' +
+      '<th>Konsumen</th><th>Proyek &amp; Unit</th><th>Marketing</th><th style="min-width:190px">Fee Booking</th><th style="min-width:190px">Fee Akad</th>' +
+    '</tr></thead><tbody id="tbodyFee"></tbody></table></div>';
+  renderTabelFee();
+}
+
+function saringFee() {
+  const f = App.feeFilter, q = String(f.q || '').toLowerCase();
+  return App.fee.rows.filter(function (r) {
+    if (f.proyek && r.idProyek !== f.proyek) return false;
+    if (f.marketing && r.marketing !== f.marketing) return false;
+    if (f.status && r.booking.status !== f.status && r.akad.status !== f.status) return false;
+    if (q && (r.nama + ' ' + r.blok + '-' + r.nomor + ' ' + r.proyek + ' ' + r.marketing).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  }).sort(function (a, b) { return String(b.tanggal).localeCompare(String(a.tanggal)); });
+}
+
+function htmlSelFee(r, it) {
+  const d = App.fee;
+  const chip = '<span class="chip ' + (CHIP_FEE[it.status] || '') + '">' + esc(it.status === 'Diajukan' ? 'Menunggu keuangan' : it.status) + '</span>';
+  const pilih = d.bolehAjukan && it.status === 'Siap Diajukan'
+    ? '<input type="checkbox" class="form-check-input me-1" ' + (App.feePilih[it.id] ? 'checked ' : '') + 'onchange="pilihFee(\'' + escJs(it.id) + '\', this.checked)" title="Pilih untuk diajukan">' : '';
+  const ubah = d.bolehAtur && it.status !== 'Diajukan' && it.status !== 'Dibayar'
+    ? '<button class="btn btn-sm btn-ghost py-0 px-1" title="Ubah nominal" onclick="formUbahFee(\'' + escJs(r.idTransaksi) + '\', \'' + it.jenis + '\')"><i class="bi bi-pencil"></i></button>' : '';
+  const bukti = it.pengajuan && it.pengajuan.bukti ? ' <a href="' + esc(it.pengajuan.bukti) + '" target="_blank" rel="noopener" style="font-size:.74rem">bukti</a>' : '';
+  return '<div class="d-flex align-items-center gap-1">' + pilih + '<b class="tabular">' + (it.nominal ? rp(it.nominal) : '-') + '</b>' + ubah + '</div>' +
+    '<div>' + chip + bukti + '</div>' +
+    '<div class="text-muted-2" style="font-size:.72rem">' + esc(it.ket || it.dasar || '') + '</div>';
+}
+
+function renderTabelFee() {
+  const tb = document.getElementById('tbodyFee');
+  if (!tb) return;
+  const list = saringFee();
+  tb.innerHTML = list.length ? list.map(function (r) {
+    return '<tr><td><b>' + esc(r.nama) + '</b><div class="text-muted-2" style="font-size:.74rem">' + esc(r.metode) + ' · ' + esc(tglIndo(r.tanggal)) + (r.statusBerkas ? ' · ' + esc(r.statusBerkas) : '') + '</div></td>' +
+      '<td style="font-size:.84rem">' + esc(r.proyek) + '<div class="text-muted-2" style="font-size:.74rem">Blok ' + esc(r.blok) + '-' + esc(r.nomor) + ' · ' + rpSingkat(r.harga) + '</div></td>' +
+      '<td style="font-size:.84rem">' + esc(r.marketing) + '</td>' +
+      '<td>' + htmlSelFee(r, r.booking) + '</td><td>' + htmlSelFee(r, r.akad) + '</td></tr>';
+  }).join('') : '<tr><td colspan="5" class="text-center text-muted-2 py-4">Belum ada data fee.</td></tr>';
+  barPilihFee();
+}
+
+function pilihFee(id, ya) { if (ya) App.feePilih[id] = true; else delete App.feePilih[id]; barPilihFee(); }
+
+function barPilihFee() {
+  const bar = document.getElementById('feeBarPilih');
+  if (!bar) return;
+  const peta = {}; semuaItemFee().forEach(function (x) { peta[x.it.id] = x; });
+  const ids = Object.keys(App.feePilih).filter(function (k) { return peta[k]; });
+  const total = ids.reduce(function (a, k) { return a + peta[k].it.nominal; }, 0);
+  const siapTampil = saringFee().reduce(function (a, r) { return a + (r.booking.status === 'Siap Diajukan' ? 1 : 0) + (r.akad.status === 'Siap Diajukan' ? 1 : 0); }, 0);
+  bar.innerHTML = '<span style="font-size:.86rem"><b>' + ids.length + '</b> fee dipilih · <b class="tabular">' + rp(total) + '</b></span>' +
+    '<button class="btn btn-sm btn-ghost" onclick="pilihSemuaFee(true)"' + (siapTampil ? '' : ' disabled') + '><i class="bi bi-check2-all"></i> Pilih semua yang siap (' + siapTampil + ')</button>' +
+    (ids.length ? '<button class="btn btn-sm btn-ghost" onclick="pilihSemuaFee(false)">Batal pilih</button>' : '') +
+    '<button class="btn btn-sm btn-brand ms-auto" onclick="formPengajuanFee()"' + (ids.length ? '' : ' disabled') + '><i class="bi bi-send"></i> Ajukan ke Keuangan</button>';
+}
+
+function pilihSemuaFee(ya) {
+  if (!ya) App.feePilih = {};
+  else saringFee().forEach(function (r) { [r.booking, r.akad].forEach(function (it) { if (it.status === 'Siap Diajukan') App.feePilih[it.id] = true; }); });
+  renderTabelFee();
+}
+
+function renderFeeMarketingTab() {
+  const box = document.getElementById('feeIsi');
+  const per = {};
+  semuaItemFee().forEach(function (x) {
+    const m = per[x.r.marketing] = per[x.r.marketing] || { nama: x.r.marketing, konsumen: {}, total: 0, dibayar: 0, diajukan: 0, siap: 0, belum: 0, booking: 0, akad: 0 };
+    m.konsumen[x.r.idTransaksi] = 1;
+    const n = x.it.nominal || 0;
+    m.total += n; if (x.it.jenis === 'Booking') m.booking += n; else m.akad += n;
+    if (x.it.status === 'Dibayar') m.dibayar += n; else if (x.it.status === 'Diajukan') m.diajukan += n; else if (x.it.status === 'Siap Diajukan') m.siap += n; else m.belum += n;
+  });
+  const list = Object.keys(per).map(function (k) { return per[k]; }).sort(function (a, b) { return b.total - a.total; });
+  box.innerHTML = '<div class="table-wrap"><table class="table-lux"><thead><tr><th>Marketing</th><th class="text-end">Konsumen</th><th class="text-end">Fee Booking</th><th class="text-end">Fee Akad</th>' +
+    '<th class="text-end">Dibayar</th><th class="text-end">Menunggu Keuangan</th><th class="text-end">Siap Diajukan</th><th class="text-end">Belum Memenuhi Syarat</th></tr></thead><tbody>' +
+    (list.length ? list.map(function (m) {
+      return '<tr class="cursor-pointer" onclick="App.feeFilter.marketing=\'' + escJs(m.nama) + '\';App.feeTab=\'konsumen\';renderFeeMarketing()"><td><b>' + esc(m.nama) + '</b></td>' +
+        '<td class="text-end">' + Object.keys(m.konsumen).length + '</td><td class="text-end tabular">' + rp(m.booking) + '</td><td class="text-end tabular">' + rp(m.akad) + '</td>' +
+        '<td class="text-end tabular" style="color:var(--success)">' + rp(m.dibayar) + '</td><td class="text-end tabular">' + rp(m.diajukan) + '</td>' +
+        '<td class="text-end tabular"><b>' + rp(m.siap) + '</b></td><td class="text-end tabular text-muted-2">' + rp(m.belum) + '</td></tr>';
+    }).join('') : '<tr><td colspan="8" class="text-center text-muted-2 py-4">Belum ada data.</td></tr>') +
+    '</tbody></table></div><div class="text-muted-2 mt-2" style="font-size:.76rem">Klik baris untuk melihat rincian konsumen marketing tersebut.</div>';
+}
+
+function renderFeePengajuanTab() {
+  const box = document.getElementById('feeIsi'), d = App.fee;
+  const chip = { 'Menunggu Keuangan': 'chip-gold', 'Dibayar': 'chip-ok', 'Ditolak': 'chip-danger', 'Dibatalkan': '' };
+  box.innerHTML = '<div class="table-wrap"><table class="table-lux"><thead><tr><th>Nomor</th><th>Marketing &amp; Rekening</th><th class="text-end">Fee</th><th class="text-end">Total</th><th>Status Keuangan</th><th class="text-end">Aksi</th></tr></thead><tbody>' +
+    (d.pengajuan.length ? d.pengajuan.map(function (p) {
+      const k = p.keuangan || {};
+      return '<tr><td><b>' + esc(p.nomor) + '</b><div class="text-muted-2" style="font-size:.74rem">' + esc(String(p.tanggal).substring(0, 16)) + ' · ' + esc(p.oleh || '') + '</div></td>' +
+        '<td style="font-size:.84rem"><b>' + esc(p.marketing) + '</b><div class="text-muted-2" style="font-size:.74rem">' + esc(p.bank) + ' ' + esc(p.norek) + ' a.n. ' + esc(p.an) + '</div></td>' +
+        '<td class="text-end">' + p.jumlah + '</td><td class="text-end tabular"><b>' + rp(p.total) + '</b></td>' +
+        '<td><span class="chip ' + (chip[p.status] || '') + '">' + esc(p.status) + '</span>' +
+          (p.status === 'Dibayar' ? '<div class="text-muted-2" style="font-size:.74rem">' + esc(tglIndo(k.tanggal)) + ' · ' + rp(k.nominal || p.total) + (k.metode ? ' · ' + esc(k.metode) : '') + '</div>' : '') +
+          (p.status === 'Ditolak' && k.catatan ? '<div class="text-muted-2" style="font-size:.74rem">' + esc(k.catatan) + '</div>' : '') +
+          (k.bukti ? '<div><a href="' + esc(k.bukti) + '" target="_blank" rel="noopener" style="font-size:.76rem"><i class="bi bi-receipt"></i> Bukti transfer</a></div>' : '') + '</td>' +
+        '<td class="text-end text-nowrap"><button class="btn btn-sm btn-ghost" title="Cetak form pengajuan" onclick="cetakPengajuanFee(\'' + escJs(p.id) + '\')"><i class="bi bi-printer"></i></button>' +
+          (d.bolehAtur && p.status === 'Menunggu Keuangan' ? '<button class="btn btn-sm btn-ghost" title="Batalkan" onclick="batalPengajuanFeeUi(\'' + escJs(p.id) + '\')"><i class="bi bi-x-circle"></i></button>' : '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="text-center text-muted-2 py-4">Belum ada pengajuan. Pilih fee yang siap di tab <b>Rekap per Konsumen</b>, lalu klik <b>Ajukan ke Keuangan</b>.</td></tr>') +
+    '</tbody></table></div>';
+}
+
+function formSetelanFee() {
+  const d = App.fee, set = d.setelan || {};
+  const selTipe = function (id, v) {
+    return '<select class="form-select form-select-sm" style="max-width:90px" id="' + id + '"><option value="rp"' + (v !== 'persen' ? ' selected' : '') + '>Rp</option><option value="persen"' + (v === 'persen' ? ' selected' : '') + '>%</option></select>';
+  };
+  openModal('Atur Fee Marketing per Proyek',
+    '<p class="text-muted-2" style="font-size:.84rem">Nilai bawaan untuk setiap konsumen di proyek tersebut. Pilih <b>Rp</b> (nominal tetap) atau <b>%</b> (persen dari harga deal unit). Nominal per konsumen tetap bisa diubah di tabel rekap.</p>' +
+    '<div class="table-wrap"><table class="table-lux"><thead><tr><th>Proyek</th><th>Fee Booking</th><th>Fee Akad</th></tr></thead><tbody>' +
+    App.proyek.map(function (p) {
+      const x = (set.proyek || {})[p.id] || {};
+      return '<tr><td><b>' + esc(p.nama) + '</b></td>' +
+        '<td><div class="d-flex gap-1">' + selTipe('fsBT_' + p.id, x.bookingTipe) + '<input class="form-control form-control-sm tabular" inputmode="numeric" id="fsB_' + p.id + '" value="' + (x.booking ? (x.bookingTipe === 'persen' ? x.booking : angka(x.booking)) : '') + '" placeholder="0" oninput="if(document.getElementById(\'fsBT_' + p.id + '\').value===\'rp\')formatRibuan(this)"></div></td>' +
+        '<td><div class="d-flex gap-1">' + selTipe('fsAT_' + p.id, x.akadTipe) + '<input class="form-control form-control-sm tabular" inputmode="numeric" id="fsA_' + p.id + '" value="' + (x.akad ? (x.akadTipe === 'persen' ? x.akad : angka(x.akad)) : '') + '" placeholder="0" oninput="if(document.getElementById(\'fsAT_' + p.id + '\').value===\'rp\')formatRibuan(this)"></div></td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    '<div class="form-check form-switch mt-3"><input class="form-check-input" type="checkbox" id="fsSemua"' + (set.marketingSemua ? ' checked' : '') + '>' +
+      '<label class="form-check-label" for="fsSemua" style="font-size:.86rem">Akun <b>Marketing</b> boleh melihat fee semua marketing &amp; membuat pengajuan (untuk admin marketing)</label></div>' +
+    '<div class="text-muted-2 mt-1" style="font-size:.76rem">Bila tidak dicentang, setiap marketing hanya melihat fee miliknya sendiri dan pengajuan dibuat oleh Owner.</div>',
+    '<button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-brand" id="btnFs" onclick="simpanSetelanFeeUi()"><i class="bi bi-save"></i> Simpan</button>', 'modal-lg');
+}
+
+function simpanSetelanFeeUi() {
+  const nilai = function (id, tipe) { const v = (document.getElementById(id) || {}).value || ''; return tipe === 'persen' ? Number(String(v).replace(',', '.')) || 0 : Number(String(v).replace(/[^0-9]/g, '')) || 0; };
+  const proyek = {};
+  App.proyek.forEach(function (p) {
+    const bt = document.getElementById('fsBT_' + p.id).value, at = document.getElementById('fsAT_' + p.id).value;
+    proyek[p.id] = { bookingTipe: bt, booking: nilai('fsB_' + p.id, bt), akadTipe: at, akad: nilai('fsA_' + p.id, at) };
+  });
+  const btn = document.getElementById('btnFs');
+  tombolLoading(btn, true);
+  call('simpanSetelanFee', App.token, { proyek: proyek, marketingSemua: document.getElementById('fsSemua').checked }).then(function (res) {
+    tombolLoading(btn, false, '<i class="bi bi-save"></i> Simpan');
+    if (!res.success) { showToast('Gagal', res.message, 'danger'); return; }
+    terimaFee(res.data); closeModal(); showToast('Berhasil', 'Aturan fee per proyek tersimpan.', 'success'); renderFeeMarketing();
+  }).catch(function (err) { tombolLoading(btn, false, '<i class="bi bi-save"></i> Simpan'); showToast('Error', err.message, 'danger'); });
+}
+
+function formUbahFee(idTransaksi, jenis) {
+  const r = App.fee.rows.find(function (x) { return x.idTransaksi === idTransaksi; });
+  if (!r) return;
+  const it = jenis === 'Booking' ? r.booking : r.akad;
+  openModal('Ubah Fee ' + jenis + ' — ' + r.nama,
+    '<div class="text-muted-2 mb-2" style="font-size:.84rem">' + esc(r.proyek) + ' · Blok ' + esc(r.blok) + '-' + esc(r.nomor) + ' · ' + esc(r.marketing) + ' · harga ' + rp(r.harga) + '</div>' +
+    '<label class="form-label">Nominal Fee ' + jenis + ' (Rp)</label><div class="input-group mb-1"><span class="input-group-text">Rp</span>' +
+      '<input class="form-control tabular" id="ufNominal" inputmode="numeric" value="' + (it.ubahan ? angka(it.nominal) : '') + '" placeholder="Kosong = bawaan proyek (' + (it.nominal && !it.ubahan ? angka(it.nominal) : '0') + ')" oninput="formatRibuan(this)"></div>' +
+    '<small class="text-muted-2 d-block mb-3">Kosongkan untuk kembali memakai nilai bawaan proyek.</small>' +
+    '<label class="form-label">Catatan</label><input class="form-control" id="ufCatatan" value="' + esc(it.catatan || '') + '" placeholder="Contoh: fee dibagi 2 marketing">',
+    '<button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-brand" id="btnUf" onclick="simpanUbahFee(\'' + escJs(idTransaksi) + '\', \'' + jenis + '\')"><i class="bi bi-save"></i> Simpan</button>', 'modal-md');
+}
+
+function simpanUbahFee(idTransaksi, jenis) {
+  const v = document.getElementById('ufNominal').value.replace(/[^0-9]/g, '');
+  const btn = document.getElementById('btnUf');
+  tombolLoading(btn, true);
+  call('ubahFeeKonsumen', App.token, idTransaksi, jenis, v, document.getElementById('ufCatatan').value).then(function (res) {
+    tombolLoading(btn, false, '<i class="bi bi-save"></i> Simpan');
+    if (!res.success) { showToast('Gagal', res.message, 'danger'); return; }
+    terimaFee(res.data); closeModal(); showToast('Berhasil', 'Fee ' + jenis + ' diperbarui.', 'success'); renderTabelFee();
+  }).catch(function (err) { tombolLoading(btn, false, '<i class="bi bi-save"></i> Simpan'); showToast('Error', err.message, 'danger'); });
+}
+
+/** Form pengajuan: dikelompokkan per marketing, isi rekening tujuan, lalu kirim ke SiKeu. */
+function formPengajuanFee() {
+  const peta = {}; semuaItemFee().forEach(function (x) { peta[x.it.id] = x; });
+  const ids = Object.keys(App.feePilih).filter(function (k) { return peta[k] && peta[k].it.status === 'Siap Diajukan'; });
+  if (!ids.length) { showToast('Belum Ada', 'Pilih fee yang siap diajukan.', 'warning'); return; }
+  const grup = {};
+  ids.forEach(function (k) { const x = peta[k]; (grup[x.r.marketing] = grup[x.r.marketing] || []).push(x); });
+  const rek = App.fee.rekening || {};
+  const mks = Object.keys(grup);
+  const total = ids.reduce(function (a, k) { return a + peta[k].it.nominal; }, 0);
+  openModal('Pengajuan Pembayaran Fee Marketing',
+    '<p class="text-muted-2" style="font-size:.84rem">Dibuat <b>' + mks.length + ' pengajuan</b> (satu per marketing) senilai <b>' + rp(total) + '</b>. Pengajuan langsung masuk ke menu <b>Pengajuan Fee</b> di aplikasi SiKeu Properti.</p>' +
+    mks.map(function (mk, i) {
+      const r = rek[mk] || {}, list = grup[mk];
+      return '<div class="card-flat p-3 mb-2"><div class="d-flex justify-content-between mb-2"><b>' + esc(mk) + '</b><b class="tabular">' + rp(list.reduce(function (a, x) { return a + x.it.nominal; }, 0)) + '</b></div>' +
+        '<div style="font-size:.8rem" class="mb-2">' + list.map(function (x) {
+          return '<div class="d-flex justify-content-between"><span>' + esc(x.r.nama) + ' · ' + esc(x.r.proyek) + ' Blok ' + esc(x.r.blok) + '-' + esc(x.r.nomor) + ' · <b>Fee ' + x.it.jenis + '</b></span><span class="tabular">' + rp(x.it.nominal) + '</span></div>';
+        }).join('') + '</div>' +
+        '<div class="row g-2"><div class="col-md-3"><input class="form-control form-control-sm" id="pfBank_' + i + '" placeholder="Bank" value="' + esc(r.bank || '') + '"></div>' +
+          '<div class="col-md-4"><input class="form-control form-control-sm" id="pfRek_' + i + '" inputmode="numeric" placeholder="No. rekening" value="' + esc(r.norek || '') + '"></div>' +
+          '<div class="col-md-5"><input class="form-control form-control-sm" id="pfAn_' + i + '" placeholder="Atas nama" value="' + esc(r.an || mk) + '"></div></div></div>';
+    }).join('') +
+    '<label class="form-label mt-2">Catatan untuk keuangan</label><textarea class="form-control" id="pfCatatan" rows="2" placeholder="Contoh: mohon dibayarkan sebelum tanggal 5"></textarea>',
+    '<button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-brand" id="btnPf" onclick="kirimPengajuanFee()"><i class="bi bi-send"></i> Kirim ke Keuangan</button>', 'modal-lg');
+  App._pfGrup = mks; App._pfIds = ids;
+}
+
+function kirimPengajuanFee() {
+  const rekening = {};
+  for (let i = 0; i < App._pfGrup.length; i++) {
+    const b = document.getElementById('pfBank_' + i).value.trim(), n = document.getElementById('pfRek_' + i).value.trim(), a = document.getElementById('pfAn_' + i).value.trim();
+    if (!b || !n || !a) { showToast('Lengkapi Rekening', 'Isi bank, nomor rekening, dan atas nama untuk ' + App._pfGrup[i] + '.', 'warning'); return; }
+    rekening[App._pfGrup[i]] = { bank: b, norek: n, an: a };
+  }
+  const btn = document.getElementById('btnPf');
+  tombolLoading(btn, true);
+  call('buatPengajuanFee', App.token, { items: App._pfIds, rekening: rekening, catatan: document.getElementById('pfCatatan').value }).then(function (res) {
+    tombolLoading(btn, false, '<i class="bi bi-send"></i> Kirim ke Keuangan');
+    if (!res.success) { showToast('Gagal', res.message, 'danger'); return; }
+    App.feePilih = {}; terimaFee(res.data); closeModal();
+    showToast('Terkirim ke SiKeu', res.message, 'success');
+    App.feeTab = 'pengajuan'; renderFeeMarketing();
+  }).catch(function (err) { tombolLoading(btn, false, '<i class="bi bi-send"></i> Kirim ke Keuangan'); showToast('Error', err.message, 'danger'); });
+}
+
+function batalPengajuanFeeUi(id) {
+  const p = App.fee.pengajuan.find(function (x) { return x.id === id; });
+  konfirmasi('Batalkan Pengajuan', 'Pengajuan ' + (p ? p.nomor : '') + ' dibatalkan dan fee-nya kembali berstatus "Siap Diajukan". Lanjutkan?', function () {
+    call('batalPengajuanFee', App.token, id, 'Dibatalkan Owner').then(function (res) {
+      if (!res.success) { showToast('Gagal', res.message, 'danger'); return; }
+      terimaFee(res.data); showToast('Dibatalkan', 'Pengajuan dibatalkan.', 'success'); renderFeeMarketing();
+    }).catch(function (err) { showToast('Error', err.message, 'danger'); });
+  });
+}
+
+function kopCetakFee(judul) {
+  const c = App.config || {}, e = App.etalase || {};
+  return '<html><head><meta charset="utf-8"><title>' + esc(judul) + '</title><style>body{font-family:Inter,Arial,sans-serif;color:#241A1E;margin:0;font-size:12px}' +
+    'h2{font-family:Georgia,serif;color:#7A1F3D;margin:0 0 2px}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    'table{width:100%;border-collapse:collapse;margin-top:10px}th{background:#7A1F3D;color:#fff;text-align:left;padding:6px;font-size:11px}' +
+    'td{padding:5px 6px;border-bottom:1px solid #E8DEDD;font-size:11px}.r{text-align:right}tfoot td{font-weight:700;background:#FBF1F4}' +
+    '.ttd{display:flex;justify-content:space-between;margin-top:36px;text-align:center}.ttd div{width:30%}.ttd .garis{margin-top:64px;border-top:1px solid #241A1E;padding-top:4px}' +
+    '@page{size:A4;margin:14mm}</style></head><body>' +
+    '<h2>' + esc(c.sprNamaPerusahaan || e.namaPerusahaan || '') + '</h2><div style="font-size:11px;color:#6B5C60">' + esc(c.sprAlamat || e.alamat || '') + '</div><hr>';
+}
+
+function cetakPengajuanFee(id) {
+  const p = App.fee.pengajuan.find(function (x) { return x.id === id; });
+  if (!p) return;
+  const html = kopCetakFee('Form Pengajuan Fee ' + p.nomor) +
+    '<h3 style="text-align:center;font-family:Georgia,serif;margin:8px 0 2px">FORM PENGAJUAN PEMBAYARAN FEE MARKETING</h3>' +
+    '<div style="text-align:center;font-size:11px;color:#6B5C60">Nomor: <b>' + esc(p.nomor) + '</b> · Tanggal: ' + esc(tglIndo(String(p.tanggal).substring(0, 10))) + '</div>' +
+    '<table style="margin-top:14px"><tbody>' +
+      '<tr><td style="width:28%">Nama Marketing</td><td><b>' + esc(p.marketing) + '</b></td></tr>' +
+      '<tr><td>Rekening Tujuan</td><td>' + esc(p.bank) + ' — ' + esc(p.norek) + ' a.n. ' + esc(p.an) + '</td></tr>' +
+      '<tr><td>Diajukan oleh</td><td>' + esc(p.oleh || '') + '</td></tr>' +
+      (p.catatan ? '<tr><td>Catatan</td><td>' + esc(p.catatan) + '</td></tr>' : '') +
+    '</tbody></table>' +
+    '<table><thead><tr><th>#</th><th>Konsumen</th><th>Proyek / Unit</th><th>Metode</th><th>Jenis Fee</th><th class="r">Harga Unit</th><th class="r">Nominal Fee</th></tr></thead><tbody>' +
+    p.rincian.map(function (x, i) {
+      return '<tr><td>' + (i + 1) + '</td><td>' + esc(x.konsumen) + '</td><td>' + esc(x.proyek) + ' · ' + esc(x.unit) + '</td><td>' + esc(x.metode) + '</td>' +
+        '<td>Fee ' + esc(x.jenis) + '</td><td class="r">' + rp(x.harga) + '</td><td class="r">' + rp(x.nominal) + '</td></tr>';
+    }).join('') + '</tbody><tfoot><tr><td colspan="6">TOTAL</td><td class="r">' + rp(p.total) + '</td></tr></tfoot></table>' +
+    '<div style="margin-top:6px;font-size:11px"><i>Terbilang: ' + esc(terbilang(p.total)) + ' rupiah</i></div>' +
+    (p.status === 'Dibayar' && p.keuangan ? '<div style="margin-top:8px;font-size:11px;color:#1B7F4B"><b>DIBAYAR</b> ' + esc(tglIndo(p.keuangan.tanggal)) + (p.keuangan.oleh ? ' oleh ' + esc(p.keuangan.oleh) : '') + '</div>' : '') +
+    '<div class="ttd"><div>Diajukan oleh,<div class="garis">' + esc(p.oleh || 'Admin Marketing') + '</div></div>' +
+      '<div>Disetujui,<div class="garis">Direktur</div></div><div>Diterima Keuangan,<div class="garis">&nbsp;</div></div></div></body></html>';
+  cetakHtml(html);
+}
+
+function cetakRekapFee() {
+  const list = saringFee();
+  if (!list.length) { showToast('Kosong', 'Tidak ada data untuk dicetak.', 'warning'); return; }
+  const sum = function (f) { return list.reduce(function (a, r) { return a + f(r); }, 0); };
+  const sel = function (it) { return (it.nominal ? rp(it.nominal) : '-') + '<div style="font-size:9.5px;color:#6B5C60">' + esc(it.status === 'Diajukan' ? 'Menunggu keuangan' : it.status) + '</div>'; };
+  const html = kopCetakFee('Rekap Fee Marketing').replace('size:A4;', 'size:A4 landscape;') +
+    '<h3 style="font-family:Georgia,serif;margin:6px 0 2px">Rekap Fee Marketing</h3><div style="font-size:11px;color:#6B5C60">Dicetak ' + new Date().toLocaleString('id-ID') + ' oleh ' + esc(App.sesi.nama || '') + ' · ' + list.length + ' konsumen</div>' +
+    '<table><thead><tr><th>#</th><th>Konsumen</th><th>Proyek / Unit</th><th>Marketing</th><th>Metode</th><th class="r">Fee Booking</th><th class="r">Fee Akad</th></tr></thead><tbody>' +
+    list.map(function (r, i) {
+      return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.nama) + '</td><td>' + esc(r.proyek) + ' · ' + esc(r.blok) + '-' + esc(r.nomor) + '</td><td>' + esc(r.marketing) + '</td><td>' + esc(r.metode) + '</td>' +
+        '<td class="r">' + sel(r.booking) + '</td><td class="r">' + sel(r.akad) + '</td></tr>';
+    }).join('') + '</tbody><tfoot><tr><td colspan="5">TOTAL</td><td class="r">' + rp(sum(function (r) { return r.booking.nominal || 0; })) + '</td><td class="r">' + rp(sum(function (r) { return r.akad.nominal || 0; })) + '</td></tr></tfoot></table></body></html>';
+  cetakHtml(html);
 }

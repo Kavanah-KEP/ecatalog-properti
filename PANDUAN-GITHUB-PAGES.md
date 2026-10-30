@@ -1,4 +1,4 @@
-# 🚀 Panduan Memasang E-Catalog Properti di GitHub Pages / Vercel (v6.1)
+# 🚀 Panduan Memasang E-Catalog Properti di GitHub Pages / Vercel (v6.2)
 
 Setelah selesai, aplikasi bisa dibuka di **`https://USERNAME.github.io/e-catalog-properti/`**. Tampilan, menu, dan fitur sama persis dengan versi Apps Script. Database tetap di Google Sheets & Drive yang sama.
 
@@ -15,7 +15,7 @@ Alamat `/exec` lama **tetap berfungsi**. Anda bisa memakai keduanya bersamaan, l
 ## Tahap 1 — Perbarui server Apps Script (± 3 menit)
 
 1. Buka proyek Apps Script E-Catalog → berkas **Kode** → hapus semua isinya → tempel isi **`E-Catalog_1-Kode.gs.txt`** → **Ctrl + S**.
-   Untuk v6.1 salin juga **JavaScript** dan **Stylesheet** (versi `/exec` tetap dipakai sebagai cadangan).
+   Untuk v6.2 salin juga **JavaScript** (versi `/exec` tetap dipakai sebagai cadangan).
 2. **Deploy → Manage deployments** → klik ikon **pensil ✏️** pada deployment yang sudah ada.
 3. Pastikan:
 
